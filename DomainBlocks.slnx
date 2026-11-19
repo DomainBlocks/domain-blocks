@@ -34,6 +34,7 @@
     <Project Path="tests/DomainBlocks.EventStore.Internal.Tests.Unit/DomainBlocks.EventStore.Internal.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.EventStore.Tests.Unit/DomainBlocks.EventStore.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.MongoDB.Sequencing.Tests.Integration/DomainBlocks.MongoDB.Sequencing.Tests.Integration.csproj" />
+    <Project Path="tests/DomainBlocks.MongoDB.Sequencing.Tests.Unit/DomainBlocks.MongoDB.Sequencing.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Serialization.Google.Protobuf.Tests.Unit/DomainBlocks.Serialization.Google.Protobuf.Tests.Unit.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.MongoDB/DomainBlocks.Testing.Integration.EventStore.MongoDB.csproj" />
     <Project Path="tests/DomainBlocks.Testing.Integration.EventStore.PostgreSQL/DomainBlocks.Testing.Integration.EventStore.PostgreSQL.csproj" />

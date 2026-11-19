@@ -52,23 +52,21 @@ public abstract class MongoIntegrationTestBase
         }
     }
 
-    protected MongoSequencedAppender<TargetDoc, TContext> CreateAppender<TContext>(
-        int index = 0,
-        IMongoSequencedAppenderPolicy<TContext>? policy = null,
-        MongoSequencedAppenderOptions? options = null)
+    protected MongoSequencedAppender<TargetDoc, TContext> CreateAppender<TContext>(int index)
     {
-        var binding = new MongoSequenceBinding<TargetDoc>(
+        return new MongoSequencedAppender<TargetDoc, TContext>(
+            MongoClient,
+            CreateBinding(),
+            logger: MongoTestEnvironment.LoggerFactory.CreateLogger($"appender_{index}"));
+    }
+
+    protected MongoSequenceBinding<TargetDoc> CreateBinding()
+    {
+        return new MongoSequenceBinding<TargetDoc>(
             sequenceCollectionNamespace: SequenceNs,
             sequenceId: SequenceId,
             targetCollectionNamespace: TargetNs,
             targetField: new ExpressionFieldDefinition<TargetDoc, long>(x => x.Nested!.Sequence));
-
-        return new MongoSequencedAppender<TargetDoc, TContext>(
-            MongoClient,
-            binding,
-            policy,
-            options,
-            MongoTestEnvironment.LoggerFactory.CreateLogger($"appender_{index}"));
     }
 
     protected async Task<long[]> ReadSequenceAsync(CancellationToken ct = default)
