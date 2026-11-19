@@ -116,11 +116,6 @@ internal sealed class BatchingScenario : IAsyncDisposable
         await MongoTestEnvironment.MongoClient.DropDatabaseAsync(_options.DatabaseName);
     }
 
-    public sealed record BatchedAppend(
-        string StreamId,
-        ExpectedStreamState<StreamPosition> ExpectedState,
-        Guid? CommitId);
-
     private sealed class HoldingPolicy(IMongoSequencedAppenderPolicy<AppendContext> policy) :
         IMongoSequencedAppenderPolicy<AppendContext>
     {

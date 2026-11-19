@@ -50,8 +50,8 @@ public class MongoEventStoreBatchingTests
         await scenario.AppendAsync("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId, ct);
 
         var (generated, repeat) = await scenario.AppendInOneBatchAsync(
-            new("stream-2", ExpectedStreamState.Any<StreamPosition>(), CommitId: null),
-            new("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId),
+            new BatchedAppend("stream-2", ExpectedStreamState.Any<StreamPosition>(), CommitId: null),
+            new BatchedAppend("stream-1", ExpectedStreamState.Any<StreamPosition>(), commitId),
             ct);
 
         await generated;
