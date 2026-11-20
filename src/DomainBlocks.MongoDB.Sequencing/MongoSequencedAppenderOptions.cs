@@ -17,11 +17,12 @@ public class MongoSequencedAppenderOptions
     public int MaxBatchSize { get; set; } = 1_000;
 
     /// <summary>
-    /// Gets or sets the maximum time to wait for additional requests to accumulate before committing a batch. When
-    /// multiple requests are queued together, the appender will wait up to this duration to coalesce further incoming
-    /// requests into the same batch. The default value is <see cref="TimeSpan.Zero"/> (no delay).
+    /// Gets or sets the maximum time to wait for more append requests when a batch is not full. The default value is
+    /// <see cref="TimeSpan.Zero"/>, which commits without waiting.
     /// </summary>
     /// <remarks>
+    /// A batch that is not full waits for up to this long before it commits, if it already holds at least
+    /// <see cref="BatchingDelayMinCount"/> requests. With the default minimum count, a batch of one request waits too.
     /// The delay depends on the system clock, so a delay shorter than the clock's resolution lasts about as long as the
     /// resolution. On Windows, the resolution is about 15 ms by default.
     /// </remarks>
