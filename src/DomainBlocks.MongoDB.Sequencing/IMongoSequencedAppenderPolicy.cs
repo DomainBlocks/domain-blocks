@@ -7,10 +7,19 @@ namespace DomainBlocks.MongoDB.Sequencing;
 public interface IMongoSequencedAppenderPolicy<TContext>
 {
     /// <summary>
-    /// Called before each batch is committed, and again with the requests that are still pending after a duplicate key
-    /// conflict. Implementations may inspect and mutate the documents in each append request, and choose to succeed or
-    /// fail individual requests early. Requests not completed here will be committed.
+    /// Called before a batch is committed. Implementations may inspect and mutate the documents in each append
+    /// request, and choose to succeed or fail individual requests early. Requests not completed here will be committed.
     /// </summary>
+    /// <remarks>
+    /// This method is called:
+    /// <list type="bullet">
+    /// <item><description>Before the first commit attempt.</description></item>
+    /// <item><description>After a duplicate key conflict, with the requests still pending.</description></item>
+    /// <item><description>After a transient error, if queued requests have joined the batch.</description></item>
+    /// </list>
+    /// Requests queued during a commit attempt may join the batch when a transient error, such as a write conflict,
+    /// aborts the attempt.
+    /// </remarks>
     Task OnBatchCommittingAsync(IReadOnlyList<AppendRequest<TContext>> batch, CancellationToken cancellationToken);
 
     /// <summary>

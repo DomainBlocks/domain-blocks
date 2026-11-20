@@ -83,14 +83,15 @@ an example showing how to build a simple, globally ordered event store using thi
 
 ## Customizing append behavior
 
-An implementation of `IMongoSequencedAppenderPolicy<TContext>` can be provided to hook into the append pipeline at two
-points:
+An implementation of `IMongoSequencedAppenderPolicy<TContext>` can customize appends. Both of its methods run outside
+the transaction.
 
-- **Before each batch is committed** - runs outside the transaction, before the sequence counter is incremented and
-  documents are inserted. Runs again with the requests that are still pending after a duplicate key conflict, but not
-  when the transaction is retried after a transient error.
-- **After a duplicate key conflict** - runs outside the transaction, after it has been aborted due to a duplicate key
-  conflict on the target collection.
+- `OnBatchCommittingAsync` can mutate the documents of a batch's requests, and complete requests early. It's called:
+    - Before the first commit attempt.
+    - After a duplicate key conflict, with the requests still pending.
+    - After a transient error, such as a write conflict, if queued requests have joined the batch.
+- `OnConflict` decides whether to retry or fail the request that caused a duplicate key conflict on the target
+  collection.
 
 Requests appended with the same `requestId` in one batch reach the policy once: it receives the first, and the others
 complete with that request's outcome.

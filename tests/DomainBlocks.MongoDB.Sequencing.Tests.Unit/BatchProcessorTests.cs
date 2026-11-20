@@ -141,15 +141,7 @@ public class BatchProcessorTests
     {
         var committer = new FakeBatchCommitter();
         var preparedBatches = new List<string>();
-
-        var policy = new CallbackAppenderPolicy<string>(
-            onBatchCommitting: (batch, _) =>
-            {
-                preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
-                return Task.CompletedTask;
-            });
-
-        var batchProcessor = CreateBatchProcessor(committer, policy);
+        var batchProcessor = CreateBatchProcessor(committer, CreateRecordingPolicy(preparedBatches));
         var requestId = Guid.NewGuid();
         var firstRequest = CreateRequest("first", requestId: requestId);
         var repeatedRequest = CreateRequest("repeat", requestId: requestId);
@@ -250,20 +242,114 @@ public class BatchProcessorTests
         queuedRequest.IsCompleted.ShouldBeFalse();
     }
 
-    // Queues the requests before the processor runs, so that it reads them as one batch, and completes the channel, so
-    // that the processor returns after committing them.
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task RunAsync_TransientErrorWithRequestQueued_RetriesWithQueuedRequest(CancellationToken ct)
+    {
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
+        var firstRequest = CreateRequest("first");
+        var queuedRequest = CreateRequest("queued");
+        var committer = new FakeBatchCommitter();
+        var preparedBatches = new List<string>();
+        var batchProcessor = CreateBatchProcessor(committer, CreateRecordingPolicy(preparedBatches));
+
+        committer.AbortNextAttempt(duringAttempt: () => QueueAndComplete(channel.Writer, [queuedRequest]));
+        channel.Writer.TryWrite(firstRequest).ShouldBeTrue();
+
+        await batchProcessor.RunAsync(channel.Reader, ct);
+
+        await Task.WhenAll(firstRequest.Completion, queuedRequest.Completion).WaitAsync(ct);
+        preparedBatches.ShouldBe(["first", "first, queued"]);
+        committer.CommitAttempts.ShouldBe(["first", "first, queued"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task RunAsync_TransientErrorWithNothingQueued_RetriesWithoutPreparing(CancellationToken ct)
+    {
+        var committer = new FakeBatchCommitter();
+        var preparedBatches = new List<string>();
+        var batchProcessor = CreateBatchProcessor(committer, CreateRecordingPolicy(preparedBatches));
+        var request = CreateRequest("only");
+
+        committer.AbortNextAttempt();
+
+        await RunOneBatchAsync(batchProcessor, [request], ct);
+
+        await request.Completion.WaitAsync(ct);
+        preparedBatches.ShouldBe(["only"]);
+        committer.CommitAttempts.ShouldBe(["only", "only"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task RunAsync_TransientErrorWithQueuedRequests_JoinsUpToMaxBatchSize(CancellationToken ct)
+    {
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
+        var committer = new FakeBatchCommitter();
+        var options = new MongoSequencedAppenderOptions { MaxBatchSize = 2, ConflictRetryDelay = TimeSpan.Zero };
+        var batchProcessor = CreateBatchProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared, options);
+
+        committer.AbortNextAttempt(duringAttempt: () =>
+            QueueAndComplete(channel.Writer, [CreateRequest("second"), CreateRequest("third")]));
+
+        channel.Writer.TryWrite(CreateRequest("first")).ShouldBeTrue();
+
+        await batchProcessor.RunAsync(channel.Reader, ct);
+
+        // The third request doesn't fit in the retry, so the next batch commits it.
+        committer.CommitAttempts.ShouldBe(["first", "first, second", "third"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task RunAsync_RequestIdRepeatedInRetry_CommitsFirstOnly(CancellationToken ct)
+    {
+        var channel = Channel.CreateUnbounded<AppendRequest<string>>();
+        var committer = new FakeBatchCommitter();
+        var batchProcessor = CreateBatchProcessor(committer, DefaultSequencedAppenderPolicy<string>.Shared);
+        var requestId = Guid.NewGuid();
+        var firstRequest = CreateRequest("first", requestId: requestId);
+        var repeatedRequest = CreateRequest("repeat", requestId: requestId);
+
+        committer.AbortNextAttempt(duringAttempt: () => QueueAndComplete(channel.Writer, [repeatedRequest]));
+        channel.Writer.TryWrite(firstRequest).ShouldBeTrue();
+
+        await batchProcessor.RunAsync(channel.Reader, ct);
+
+        await Task.WhenAll(firstRequest.Completion, repeatedRequest.Completion).WaitAsync(ct);
+        committer.CommittedValues.ShouldBe(["first"]);
+    }
+
+    // Queues the requests before the processor runs, so that it reads them as one batch.
     private static async Task RunOneBatchAsync(
         BatchProcessor<string> batchProcessor,
         AppendRequest<string>[] requests,
         CancellationToken ct)
     {
         var channel = Channel.CreateUnbounded<AppendRequest<string>>();
-
-        foreach (var request in requests)
-            channel.Writer.TryWrite(request).ShouldBeTrue();
-
-        channel.Writer.Complete();
+        QueueAndComplete(channel.Writer, requests);
         await batchProcessor.RunAsync(channel.Reader, ct);
+    }
+
+    // Completing the channel makes the processor return once it has committed every queued request.
+    private static void QueueAndComplete(ChannelWriter<AppendRequest<string>> channel, AppendRequest<string>[] requests)
+    {
+        foreach (var request in requests)
+            channel.TryWrite(request).ShouldBeTrue();
+
+        channel.Complete();
+    }
+
+    // The policy records the contexts of each batch it prepares, joined with commas.
+    private static CallbackAppenderPolicy<string> CreateRecordingPolicy(List<string> preparedBatches)
+    {
+        return new CallbackAppenderPolicy<string>(
+            onBatchCommitting: (batch, _) =>
+            {
+                preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
+                return Task.CompletedTask;
+            });
     }
 
     private static BatchProcessor<string> CreateBatchProcessor(
