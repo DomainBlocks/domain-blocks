@@ -141,15 +141,7 @@ public class BatchProcessorTests
     {
         var committer = new FakeBatchCommitter();
         var preparedBatches = new List<string>();
-
-        var policy = new CallbackAppenderPolicy<string>(
-            onBatchCommitting: (batch, _) =>
-            {
-                preparedBatches.Add(string.Join(", ", batch.Select(x => x.Context)));
-                return Task.CompletedTask;
-            });
-
-        var batchProcessor = CreateBatchProcessor(committer, policy);
+        var batchProcessor = CreateBatchProcessor(committer, CreateRecordingPolicy(preparedBatches));
         var requestId = Guid.NewGuid();
         var firstRequest = CreateRequest("first", requestId: requestId);
         var repeatedRequest = CreateRequest("repeat", requestId: requestId);
@@ -291,7 +283,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task RunAsync_TransientErrorWithMoreQueuedThanFit_JoinsUpToMaxBatchSize(CancellationToken ct)
+    public async Task RunAsync_TransientErrorWithQueueOverflowingBatch_JoinsUpToMaxBatchSize(CancellationToken ct)
     {
         var channel = Channel.CreateUnbounded<AppendRequest<string>>();
         var committer = new FakeBatchCommitter();
