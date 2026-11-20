@@ -102,12 +102,6 @@ internal sealed class BatchProcessor<TContext>(
         }
     }
 
-    /// <summary>
-    /// Commits the batch and completes its requests, adding queued requests to the batch when a transient error aborts
-    /// a commit. Removes from the batch the requests that complete before the commit, and the repeats of a request ID,
-    /// which complete with the first. If this method throws, failing the requests left in the batch completes every
-    /// request that hasn't completed.
-    /// </summary>
     private async Task ProcessAsync(
         List<AppendRequest<TContext>> batch,
         ChannelReader<AppendRequest<TContext>> channel,
@@ -142,9 +136,7 @@ internal sealed class BatchProcessor<TContext>(
                     isPrepared = false;
                     break;
                 case CommitResult.TransientError:
-                    // Commits serialize on the sequence document, so under contention throughput depends on how many
-                    // requests each commit carries: the requests queued during the attempt join the retry. The aborted
-                    // commit wrote nothing, so without them the preparation still holds.
+                    // Before retrying, include any request that may have been queued.
                     isPrepared = ReadQueued(batch, channel) == 0;
                     break;
             }
