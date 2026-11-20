@@ -51,7 +51,6 @@ public class MongoSequencedAppenderBenchmarkTests
     {
         var options = new MongoSequencedAppenderOptions
         {
-            MaxBatchSize = 1_000,
             BatchingDelay = TimeSpan.FromMilliseconds(5)
         };
 
@@ -87,7 +86,6 @@ public class MongoSequencedAppenderBenchmarkTests
     {
         var options = new MongoSequencedAppenderOptions
         {
-            MaxBatchSize = 1_000,
             BatchingDelay = TimeSpan.FromMilliseconds(5)
         };
 

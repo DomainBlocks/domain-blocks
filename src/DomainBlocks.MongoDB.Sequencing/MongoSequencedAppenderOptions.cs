@@ -12,9 +12,9 @@ public class MongoSequencedAppenderOptions
     public int QueueCapacity { get; set; } = 1_000;
 
     /// <summary>
-    /// Gets or sets the maximum number of appends processed in a single transaction. The default value is 500.
+    /// Gets or sets the maximum number of appends processed in a single transaction. The default value is 1,000.
     /// </summary>
-    public int MaxBatchSize { get; set; } = 500;
+    public int MaxBatchSize { get; set; } = 1_000;
 
     /// <summary>
     /// Gets or sets the maximum time to wait for additional requests to accumulate before committing a batch. When
