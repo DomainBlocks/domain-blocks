@@ -283,7 +283,7 @@ public class BatchProcessorTests
 
     [Test]
     [CancelAfter(TestTimeoutMillis)]
-    public async Task RunAsync_TransientErrorWithQueueOverflowingBatch_JoinsUpToMaxBatchSize(CancellationToken ct)
+    public async Task RunAsync_TransientErrorWithQueuedRequests_JoinsUpToMaxBatchSize(CancellationToken ct)
     {
         var channel = Channel.CreateUnbounded<AppendRequest<string>>();
         var committer = new FakeBatchCommitter();
