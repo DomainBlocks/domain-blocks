@@ -67,6 +67,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
     [TestCase(1, 10)]
     [TestCase(1, 100)]
     [TestCase(1, 1_000)]
+    [TestCase(4, 100)] // SPIKE
     [TestCase(4, 1_000)]
     [Explicit("Benchmark")]
     [CancelAfter(BenchmarkTimeouts.DefaultMillis)]

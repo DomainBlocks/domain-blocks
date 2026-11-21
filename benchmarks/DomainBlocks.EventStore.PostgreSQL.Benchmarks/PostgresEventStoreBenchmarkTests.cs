@@ -4,6 +4,7 @@ using DomainBlocks.Benchmarking.EventStore;
 using DomainBlocks.EventStore.TypeMapping;
 using DomainBlocks.Testing.Events;
 using DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
+using HdrHistogram;
 using Npgsql;
 using NUnit.Framework;
 using Shouldly;
@@ -153,5 +154,135 @@ public class PostgresEventStoreBenchmarkTests() :
     {
         await using var command = PostgresTestEnvironment.DataSource.CreateCommand(sql);
         await command.ExecuteNonQueryAsync();
+    }
+
+    // SPIKE: appends offered at a fixed rate from a spinning thread, independent of completions, spread over the
+    // instances. Latency runs from each append's scheduled time, so queueing behind a slow append counts. Each of
+    // 1,000 slots starts a new stream every 10 uses, as the closed-loop workers do.
+    [TestCase(1, 1_000)]
+    [TestCase(1, 10_000)]
+    [TestCase(1, 30_000)]
+    [TestCase(4, 1_000)]
+    [TestCase(4, 10_000)]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public async Task AppendAsync_SpikeOpenLoop(int instanceCount, int rate, CancellationToken ct)
+    {
+        var instances = new IEventStore<object, string, StreamPosition, LogPosition>[instanceCount];
+        for (var i = 0; i < instanceCount; i++)
+            instances[i] = CreateEventStore(EventTypeMap, loggerNameSuffix: $"_{i}");
+
+        try
+        {
+            var runId = $"bench-{Guid.NewGuid():N}";
+
+            var (opsPerSecond, errors, latencies) = await RunOpenLoopAsync(
+                i => instances[i % instanceCount].AppendAsync(
+                    $"{runId}-{i / 1_000 / DefaultEventsPerStream}-{i % 1_000}",
+                    [new TestEvent { Value = "Benchmark" }],
+                    cancellationToken: ct),
+                rate,
+                ct);
+
+            var output = TestContext.Out;
+            await output.WriteLineAsync($"--- open-loop append, {instanceCount} instance(s), {rate:N0}/s offered ---");
+            await output.WriteLineAsync($"errors:        {errors:N0}");
+            await output.WriteLineAsync($"throughput:    {opsPerSecond:N0} ops/s");
+            await output.WriteLineAsync($"p50:           {Ms(latencies.GetValueAtPercentile(50)):F3} ms");
+            await output.WriteLineAsync($"p90:           {Ms(latencies.GetValueAtPercentile(90)):F3} ms");
+            await output.WriteLineAsync($"p99:           {Ms(latencies.GetValueAtPercentile(99)):F3} ms");
+            await output.WriteLineAsync($"mean:          {Ms(latencies.GetMean()):F3} ms");
+            await output.WriteLineAsync($"timer probe:   Task.Delay(1 ms) median {await ProbeTimerAsync(ct):F2} ms");
+
+            errors.ShouldBe(0);
+        }
+        finally
+        {
+            foreach (var instance in instances)
+                await instance.DisposeAsync();
+        }
+
+        static double Ms(double ticks) => ticks * 1000.0 / Stopwatch.Frequency;
+    }
+
+    private static async Task<double> ProbeTimerAsync(CancellationToken ct)
+    {
+        var samples = new double[21];
+
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var start = Stopwatch.GetTimestamp();
+            await Task.Delay(1, ct);
+            samples[i] = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        }
+
+        Array.Sort(samples);
+        return samples[samples.Length / 2];
+    }
+
+    private static async Task<(double OpsPerSecond, long Errors, HdrHistogram.HistogramBase Latencies)>
+        RunOpenLoopAsync(Func<long, Task> appendAsync, int rate, CancellationToken ct)
+    {
+        var warmUp = TimeSpan.FromSeconds(5);
+        var measure = TimeSpan.FromSeconds(15);
+        var freq = Stopwatch.Frequency;
+        var latencies = new HdrHistogram.LongConcurrentHistogram(1, HdrHistogram.TimeStamp.Hours(1), 3);
+        long errors = 0, completed = 0, outstanding = 0;
+
+        var start = Stopwatch.GetTimestamp() + (freq / 10);
+        var measureStart = start + (long)(warmUp.TotalSeconds * freq);
+        var end = measureStart + (long)(measure.TotalSeconds * freq);
+        var ticksPerOp = (double)freq / rate;
+
+        async Task RunOneAsync(long index, long scheduled, bool measured)
+        {
+            try
+            {
+                await appendAsync(index);
+
+                if (measured)
+                {
+                    latencies.RecordValue(Math.Max(1, Stopwatch.GetTimestamp() - scheduled));
+                    Interlocked.Increment(ref completed);
+                }
+            }
+            catch
+            {
+                Interlocked.Increment(ref errors);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref outstanding);
+            }
+        }
+
+        var thread = new Thread(() =>
+        {
+            for (long i = 0; ; i++)
+            {
+                var scheduled = start + (long)(i * ticksPerOp);
+                if (scheduled >= end)
+                    break;
+
+                while (Stopwatch.GetTimestamp() < scheduled)
+                    Thread.SpinWait(10);
+
+                Interlocked.Increment(ref outstanding);
+                _ = RunOneAsync(i, scheduled, scheduled >= measureStart);
+            }
+        })
+        {
+            IsBackground = true,
+            Priority = ThreadPriority.AboveNormal
+        };
+
+        thread.Start();
+        await Task.Run(thread.Join, ct);
+
+        var drainDeadline = Stopwatch.GetTimestamp() + (60 * freq);
+        while (Interlocked.Read(ref outstanding) > 0 && Stopwatch.GetTimestamp() < drainDeadline)
+            await Task.Delay(50, ct);
+
+        return (completed / measure.TotalSeconds, errors, latencies);
     }
 }

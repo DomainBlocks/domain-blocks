@@ -33,8 +33,13 @@ internal sealed class BatchingAppender : IAppender
 
         _command = new AppendBatchCommand(dataSource, names);
         _maxBatchSize = options.AppendMaxBatchSize;
-        _batchingDelay = options.AppendBatchingDelay;
-        _batchingDelayMinCount = options.AppendBatchingDelayMinCount;
+        // SPIKE: DBX_SPIKE_PG_DELAY_US and DBX_SPIKE_PG_MIN_COUNT override the options.
+        _batchingDelay = int.TryParse(Environment.GetEnvironmentVariable("DBX_SPIKE_PG_DELAY_US"), out var delayUs)
+            ? TimeSpan.FromMicroseconds(delayUs)
+            : options.AppendBatchingDelay;
+        _batchingDelayMinCount = int.TryParse(Environment.GetEnvironmentVariable("DBX_SPIKE_PG_MIN_COUNT"), out var min)
+            ? min
+            : options.AppendBatchingDelayMinCount;
         _logger = logger;
 
         _channel = Channel.CreateBounded<AppendRequest>(new BoundedChannelOptions(options.AppendQueueCapacity)
