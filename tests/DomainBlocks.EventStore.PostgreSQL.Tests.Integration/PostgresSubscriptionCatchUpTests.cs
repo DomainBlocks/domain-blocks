@@ -206,7 +206,7 @@ public class PostgresSubscriptionCatchUpTests : PostgresIntegrationTest
             new PostgresAllCatchUpReader<object>(_reader, options.Filter, options, correlationId, logger),
             options.Filter,
             origin,
-            options.QueueCapacity,
+            options,
             correlationId,
             logger);
     }

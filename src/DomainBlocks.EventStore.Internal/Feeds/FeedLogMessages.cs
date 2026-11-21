@@ -35,6 +35,13 @@ internal static partial class FeedLogMessages
         string feedId,
         string observerId);
 
+    [LoggerMessage(LogLevel.Error, "[feed: {FeedId}, obs: {ObserverId}] failed while receiving a failure; detaching")]
+    internal static partial void ObserverOnFailureFailed(
+        this ILogger logger,
+        Exception exception,
+        string feedId,
+        string observerId);
+
     [LoggerMessage(LogLevel.Error, "[feed: {FeedId}, obs: {ObserverId}] failed while receiving an error")]
     internal static partial void ObserverOnErrorFailed(
         this ILogger logger,
@@ -51,13 +58,12 @@ internal static partial class FeedLogMessages
     [LoggerMessage(LogLevel.Debug, "[feed: {FeedId}] stopping")]
     internal static partial void FeedStopping(this ILogger logger, string feedId);
 
-    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] session ended; reconnecting")]
-    internal static partial void FeedEnded(this ILogger logger, string feedId);
-
     [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}] connection lost; reconnecting")]
     internal static partial void FeedConnectionLost(this ILogger logger, Exception exception, string feedId);
 
-    [LoggerMessage(LogLevel.Warning, "[feed: {FeedId}, attempt: {Attempt}] failed to connect; retrying in {Delay}")]
+    [LoggerMessage(
+        LogLevel.Warning,
+        "[feed: {FeedId}, attempt: {Attempt}] failed to connect or stay connected; retrying in {Delay}")]
     internal static partial void FeedRetrying(
         this ILogger logger,
         Exception exception,

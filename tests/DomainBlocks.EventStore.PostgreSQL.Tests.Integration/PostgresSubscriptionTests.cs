@@ -9,8 +9,8 @@ namespace DomainBlocks.EventStore.PostgreSQL.Tests.Integration;
 
 /// <summary>
 /// Tests PostgreSQL-specific subscription behavior beyond the shared suite: slot sharing, stream-position resume, the
-/// order of a large append, the replication barrier without synchronous standbys, a replay that loses its connections,
-/// and connection strings with multiple hosts.
+/// order of a large append, the replication barrier without synchronous standbys, a replay or a feed that loses its
+/// connections, and connection strings with multiple hosts.
 /// </summary>
 [TestFixture]
 public class PostgresSubscriptionTests : PostgresIntegrationTest
@@ -246,12 +246,69 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
         await eventStore.AppendAsync("s1", [.. events.Select(Appendable)], cancellationToken: ct);
 
         await using var subscription = eventStore
-            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { CatchUpMaxRetryAttempts = 0 })
+            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { MaxRetryAttempts = 0 })
             .GetAsyncEnumerator(ct);
 
         (await NextEventAsync(subscription)).Payload.ShouldBe(events[0]);
 
         await EndConnectionsAsync(applicationName, ct);
+
+        await Should.ThrowAsync<NpgsqlException>(subscription.MoveNextAsync().AsTask());
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_FeedConnectionEndedWhileLive_RecoversAndDeliversEvents(CancellationToken ct)
+    {
+        await using var subscription = _eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start)
+            .GetAsyncEnumerator(ct);
+
+        await ShouldBeCaughtUpAsync(subscription);
+
+        await EndFeedConnectionAsync(ct);
+
+        var live = new TestEvent { Value = "live" };
+        await _eventStore.AppendAsync("s1", [Appendable(live)], cancellationToken: ct);
+
+        (await NextEventAsync(subscription)).Payload.ShouldBe(live);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_FeedConnectionEndedWhileLiveWithoutRetries_Throws(CancellationToken ct)
+    {
+        await using var subscription = _eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { MaxRetryAttempts = 0 })
+            .GetAsyncEnumerator(ct);
+
+        await ShouldBeCaughtUpAsync(subscription);
+
+        await EndFeedConnectionAsync(ct);
+
+        await Should.ThrowAsync<NpgsqlException>(subscription.MoveNextAsync().AsTask());
+    }
+
+    [Test]
+    [CancelAfter(TestTimeouts.DefaultMillis)]
+    public async Task SubscribeToAll_ServerUnreachableWithoutRetries_Throws(CancellationToken ct)
+    {
+        // Nothing listens on this port, so the feed can't connect.
+        var builder = new NpgsqlConnectionStringBuilder(PostgresTestEnvironment.ConnectionString) { Port = 1 };
+
+        await using var dataSource = new NpgsqlDataSourceBuilder(builder.ConnectionString)
+            .UsePostgresEventStore(Options)
+            .Build();
+
+        await using var eventStore = new PostgresEventStoreBuilder<object>()
+            .UseDataSource(dataSource)
+            .UseOptions(Options)
+            .ConfigureCodec(x => x.UseEventTypeMap(DefaultEventTypeMap))
+            .Build();
+
+        await using var subscription = eventStore
+            .SubscribeToAll(SubscriptionOrigin.Start, new SubscriptionOptions { MaxRetryAttempts = 0 })
+            .GetAsyncEnumerator(ct);
 
         await Should.ThrowAsync<NpgsqlException>(subscription.MoveNextAsync().AsTask());
     }
@@ -317,6 +374,17 @@ public class PostgresSubscriptionTests : PostgresIntegrationTest
 
         command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = applicationName });
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    // The feed may not have started replicating yet, so there may be no walsender to end at first.
+    private async Task EndFeedConnectionAsync(CancellationToken ct)
+    {
+        await using var command = DataSource.CreateCommand(
+            "SELECT count(pg_terminate_backend(active_pid)) FROM pg_replication_slots " +
+            "WHERE slot_name LIKE 'dbx_%' AND active_pid IS NOT NULL");
+
+        while (await command.ExecuteScalarAsync(ct) is 0L)
+            await Task.Delay(10, ct);
     }
 
     private async Task<string> GetWalPositionAsync(CancellationToken ct)

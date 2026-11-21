@@ -37,6 +37,9 @@ internal static partial class SubscriptionLogMessages
     [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] feed was reset; restart pending")]
     internal static partial void SubscriptionFeedReset(this ILogger logger, string subscriptionId);
 
+    [LoggerMessage(LogLevel.Warning, "[sub: {SubscriptionId}] reached its retry limit while the feed was failing")]
+    internal static partial void SubscriptionRetryLimitReached(this ILogger logger, string subscriptionId);
+
     [LoggerMessage(LogLevel.Information, "[sub: {SubscriptionId}] restarting from start")]
     internal static partial void SubscriptionRestartingFromStart(this ILogger logger, string subscriptionId);
 

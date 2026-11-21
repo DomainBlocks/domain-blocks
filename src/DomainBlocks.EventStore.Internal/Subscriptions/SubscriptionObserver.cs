@@ -10,11 +10,19 @@ namespace DomainBlocks.EventStore.Internal.Subscriptions;
 /// a feed reset, it records the reason and completes its queue, and the cycle restarts once the queue is drained, which
 /// can be much later.
 /// </summary>
+/// <remarks>
+/// The observer applies the subscription's retry limits to the feed's failures while the subscription depends on the
+/// feed: until the feed first connects, and once the subscription is live. When a limit is reached, the queue completes
+/// with the failure's error. In between, the subscription is catching up, which the feed doesn't hold back, and the
+/// feed may recover before the replay ends, so its failures don't count.
+/// </remarks>
 internal sealed class SubscriptionObserver<TEvent, TSourceEvent>(
     int queueCapacity,
     EventFilter liveFilter,
     ILogger? logger = null,
-    string subscriptionId = "") :
+    string subscriptionId = "",
+    int maxRetryAttempts = int.MaxValue,
+    TimeSpan? retryTimeout = null) :
     IFeedObserver<TSourceEvent>,
     IDisposable
     where TEvent : notnull
@@ -28,6 +36,8 @@ internal sealed class SubscriptionObserver<TEvent, TSourceEvent>(
                 SingleReader = true
             });
 
+    private readonly FeedRetryLimit _connectionLimit = new(maxRetryAttempts, retryTimeout ?? Timeout.InfiniteTimeSpan);
+    private FeedRetryLimit? _liveLimit;
     private int _stopReason;
     private bool _isStopped;
 
@@ -73,10 +83,33 @@ internal sealed class SubscriptionObserver<TEvent, TSourceEvent>(
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask OnFailureAsync(FeedFailure failure, CancellationToken cancellationToken)
+    {
+        var limit = Volatile.Read(ref _liveLimit) ?? (failure.HasConnected ? null : _connectionLimit);
+
+        if (limit is null || !limit.IsReachedBy(failure))
+            return ValueTask.CompletedTask;
+
+        _isStopped = true;
+
+        if (_channel.Writer.TryComplete(failure.Error))
+            logger?.SubscriptionRetryLimitReached(subscriptionId);
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask OnErrorAsync(Exception exception, CancellationToken cancellationToken)
     {
         _channel.Writer.TryComplete(exception);
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Records that the subscription has caught up, so the feed's failures from now on count towards its retry limits.
+    /// </summary>
+    public void OnCaughtUp()
+    {
+        Volatile.Write(ref _liveLimit, new FeedRetryLimit(maxRetryAttempts, retryTimeout ?? Timeout.InfiniteTimeSpan));
     }
 
     public void Dispose() => Stop(SubscriptionStopReason.Disposed);

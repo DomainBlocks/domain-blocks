@@ -272,7 +272,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             catchUpReader,
             options.Filter,
             origin,
-            options.QueueCapacity,
+            options,
             correlationId,
             _logger);
     }
@@ -303,7 +303,7 @@ public sealed class MongoEventStore<TEvent> : IEventStore<TEvent, string, Stream
             catchUpReader,
             EventFilter.StreamIds(streamId) & options.Filter,
             origin,
-            options.QueueCapacity,
+            options,
             correlationId,
             _logger);
     }

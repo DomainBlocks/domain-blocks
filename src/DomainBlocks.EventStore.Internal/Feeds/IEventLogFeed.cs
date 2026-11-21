@@ -20,5 +20,9 @@ internal interface IEventLogFeed<out T, out TMark> : IAsyncDisposable
 
     IDisposable Attach(IFeedObserver<T> observer, string correlationId = "unknown");
 
+    /// <summary>
+    /// Starts the feed, and returns a task that completes when the feed first connects, or faults if the feed stops
+    /// first, which includes being disposed.
+    /// </summary>
     Task ConnectAsync(CancellationToken cancellationToken = default);
 }

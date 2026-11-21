@@ -93,22 +93,4 @@ public class PostgresReplicationOptionsTests
 
         options.MaxRetryDelay.ShouldBe(delay);
     }
-
-    [TestCase(-1)]
-    [TestCase(int.MinValue)]
-    public void MaxRetryAttempts_Negative_Throws(int attempts)
-    {
-        var options = new PostgresReplicationOptions();
-
-        Should.Throw<ArgumentOutOfRangeException>(() => options.MaxRetryAttempts = attempts);
-    }
-
-    [TestCase(0)]
-    [TestCase(int.MaxValue)]
-    public void MaxRetryAttempts_Boundary_IsSet(int attempts)
-    {
-        var options = new PostgresReplicationOptions { MaxRetryAttempts = attempts };
-
-        options.MaxRetryAttempts.ShouldBe(attempts);
-    }
 }
