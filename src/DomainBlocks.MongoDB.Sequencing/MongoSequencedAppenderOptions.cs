@@ -22,9 +22,9 @@ public class MongoSequencedAppenderOptions
     /// </summary>
     /// <remarks>
     /// A batch that is not full waits for up to this long before it commits, if it already holds at least
-    /// <see cref="BatchingDelayMinCount"/> requests. With the default minimum count, a batch of one request waits too.
-    /// The delay depends on the system clock, so a delay shorter than the clock's resolution lasts about as long as the
-    /// resolution. On Windows, the resolution is about 15 ms by default.
+    /// <see cref="BatchingDelayMinCount"/> requests. The minimum count defaults to zero, so a batch of one request
+    /// waits too. The delay depends on the system clock, so a delay shorter than the clock's resolution lasts about as
+    /// long as the resolution. On Windows, the resolution is about 15 ms by default.
     /// </remarks>
     public TimeSpan BatchingDelay { get; set; }
 

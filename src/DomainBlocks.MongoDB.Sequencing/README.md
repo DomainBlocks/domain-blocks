@@ -143,10 +143,8 @@ following parameters were used:
 \* Values greater than 1 indicate multiple appender instances issuing append operations concurrently.
 
 Throughput decreases as appender instances are added. Each instance receives only its share of the 1,000 in-flight
-operations, so its transactions are smaller. The instances' transactions take turns on the counter document, and each
-transaction has a fixed cost, so smaller transactions commit fewer operations per second. Write conflicts between the
-instances cost little: a transaction that loses one fails fast, and its retry takes in the operations queued in the
-meantime.
+operations, resulting in more, smaller transactions rather than fewer, larger ones. The transactions take turns on the
+counter document, and each has a fixed cost.
 
 Deployments with a multi-node MongoDB cluster will see reduced throughput due to replication overhead, as
 `w: "majority"` write concern requires acknowledgement from a majority of members before a transaction can commit.
