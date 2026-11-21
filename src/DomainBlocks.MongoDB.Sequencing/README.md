@@ -142,17 +142,18 @@ following parameters were used:
 
 \* Values greater than 1 indicate multiple appender instances issuing append operations concurrently.
 
-Throughput decreases as the number of concurrent appenders increases due to greater write conflict contention on the
-counter document, causing more transactions to abort and retry.
+Throughput decreases as appender instances are added. Each instance receives only its share of the 1,000 in-flight
+operations, resulting in more, smaller transactions rather than fewer, larger ones. The transactions take turns on the
+counter document, and each has a fixed cost.
 
 Deployments with a multi-node MongoDB cluster will see reduced throughput due to replication overhead, as
 `w: "majority"` write concern requires acknowledgement from a majority of members before a transaction can commit.
 
 On Windows, .NET timers depend on the system clock, which has a resolution of
 [about 15 ms](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.delay?view=net-10.0#remarks) by
-default. The 5 ms batching delay therefore waits about 15 ms. With more than one instance, each instance receives only
-its share of the 1,000 in-flight operations. Its batches never reach the batch size, so they always wait for the full
-delay, which lowers the Windows figures for 3 and 5 instances.
+default. The 5 ms batching delay therefore waits about 15 ms. With more than one instance, each instance's batches hold
+only its share of the in-flight operations, so they never reach the batch size and always wait for the full delay,
+which lowers the Windows figures for 3 and 5 instances.
 
 Throughput therefore drops further on Windows as instances are added. The table below gives the drop from one instance.
 The MacBook Air and Windows PC columns come from the throughput table above. The 1 ms timer column comes from separate

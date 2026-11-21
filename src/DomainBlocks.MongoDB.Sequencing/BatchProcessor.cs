@@ -39,9 +39,7 @@ internal sealed class BatchProcessor<TContext>(
                 // Drain what's already queued
                 ReadQueued(batch, channel);
 
-                // If multiple requests arrived together, more are likely in-flight - wait up to the batching delay for
-                // additional requests to accumulate before committing (Nagle-style coalescing). Short-circuits as soon
-                // as the batch is full.
+                // Waiting for more requests trades latency for fewer, larger transactions.
                 if (batchingDelay > TimeSpan.Zero &&
                     batch.Count >= batchingDelayThreshold &&
                     batch.Count < maxBatchSize)
