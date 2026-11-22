@@ -11,6 +11,19 @@ internal sealed record ObservedEvent(
     long Operation,
     int Index)
 {
+    public static ObservedEvent From(ReadEvent<object, string, StreamPosition, LogPosition> readEvent)
+    {
+        var context = readEvent.Context;
+        var chaosEvent = (ChaosEvent)readEvent.Payload;
+
+        return new ObservedEvent(
+            context.LogPosition,
+            context.StreamId,
+            context.StreamPosition,
+            chaosEvent.Operation,
+            chaosEvent.Index);
+    }
+
     public override string ToString() =>
         $"event {Operation}.{Index} at log position {LogPosition} ({StreamId}@{StreamPosition})";
 }

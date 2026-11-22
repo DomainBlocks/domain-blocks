@@ -5,10 +5,16 @@
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="Shouldly" />
+    <PackageReference Include="Testcontainers.Toxiproxy" />
+    <PackageReference Include="ToxiproxyNetCore" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\DomainBlocks.EventStore.MongoDB\DomainBlocks.EventStore.MongoDB.csproj" />
     <ProjectReference Include="..\..\src\DomainBlocks.EventStore\DomainBlocks.EventStore.csproj" />
+    <ProjectReference Include="..\..\src\DomainBlocks.Serialization.MongoDB.Bson\DomainBlocks.Serialization.MongoDB.Bson.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing.Integration.MongoDB\DomainBlocks.Testing.Integration.MongoDB.csproj" />
+    <ProjectReference Include="..\DomainBlocks.Testing\DomainBlocks.Testing.csproj" />
   </ItemGroup>
 
 </Project>
