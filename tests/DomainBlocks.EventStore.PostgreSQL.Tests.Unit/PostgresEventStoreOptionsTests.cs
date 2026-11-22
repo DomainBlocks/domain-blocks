@@ -9,10 +9,6 @@ public class PostgresEventStoreOptionsTests
 
     private static readonly string[] BoundarySchemas = ["a", "_", new('a', 63)];
 
-    private static readonly TimeSpan[] NegativeDelays = [TimeSpan.FromTicks(-1), Timeout.InfiniteTimeSpan];
-
-    private static readonly TimeSpan[] BoundaryDelays = [TimeSpan.Zero, TimeSpan.MaxValue];
-
     [Test]
     public void Schema_Null_Throws()
     {
@@ -71,39 +67,6 @@ public class PostgresEventStoreOptionsTests
         var options = new PostgresEventStoreOptions { AppendMaxBatchSize = size };
 
         options.AppendMaxBatchSize.ShouldBe(size);
-    }
-
-    [TestCaseSource(nameof(NegativeDelays))]
-    public void AppendBatchingDelay_Negative_Throws(TimeSpan delay)
-    {
-        var options = new PostgresEventStoreOptions();
-
-        Should.Throw<ArgumentOutOfRangeException>(() => options.AppendBatchingDelay = delay);
-    }
-
-    [TestCaseSource(nameof(BoundaryDelays))]
-    public void AppendBatchingDelay_Boundary_IsSet(TimeSpan delay)
-    {
-        var options = new PostgresEventStoreOptions { AppendBatchingDelay = delay };
-
-        options.AppendBatchingDelay.ShouldBe(delay);
-    }
-
-    [Test]
-    public void AppendBatchingDelayMinCount_Negative_Throws()
-    {
-        var options = new PostgresEventStoreOptions();
-
-        Should.Throw<ArgumentOutOfRangeException>(() => options.AppendBatchingDelayMinCount = -1);
-    }
-
-    [TestCase(0)]
-    [TestCase(int.MaxValue)]
-    public void AppendBatchingDelayMinCount_NotNegative_IsSet(int count)
-    {
-        var options = new PostgresEventStoreOptions { AppendBatchingDelayMinCount = count };
-
-        options.AppendBatchingDelayMinCount.ShouldBe(count);
     }
 
     [TestCase(0)]

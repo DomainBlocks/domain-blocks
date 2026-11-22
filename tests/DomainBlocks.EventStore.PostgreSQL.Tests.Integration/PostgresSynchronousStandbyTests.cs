@@ -102,16 +102,16 @@ public class PostgresSynchronousStandbyTests
         await using var dataSource = CreateDataSource();
         await PostgresEventStoreAdmin.EnsureInitializedAsync(dataSource, _options, cancellationToken: ct);
 
-        // The batching delay holds the batch open until every append has joined it.
         await using var eventStore = CreateEventStore(dataSource, new PostgresEventStoreOptions
         {
             Schema = _options.Schema,
             AppendQueueCapacity = appendCount,
-            AppendMaxBatchSize = appendCount,
-            AppendBatchingDelay = TimeSpan.FromMinutes(1)
+            AppendMaxBatchSize = appendCount
         });
 
-        await _server.CutOffStandbyAsync();
+        // The appends queue up behind a held batch, so they go out as one batch once it commits. The row lock, queued
+        // before the hold ends, then keeps that batch waiting until the standby is cut off.
+        await using var held = await HeldBatch.StartAsync(eventStore, dataSource, _options.Schema, ct);
 
         var appends = Enumerable.Range(0, appendCount)
             .Select(i => eventStore.AppendAsync(
@@ -120,6 +120,12 @@ public class PostgresSynchronousStandbyTests
                 cancellationToken: ct))
             .ToArray();
 
+        await using var rowLock = await SequenceRowLock.QueueAsync(dataSource, _options.Schema, ct);
+        await held.ReleaseAsync(ct);
+        await rowLock.WaitUntilBlockingAsync(ct);
+
+        await _server.CutOffStandbyAsync();
+        await rowLock.ReleaseAsync(ct);
         await WaitForSyncRepAsync(ct);
 
         await Task.Delay(HoldDuration, ct);

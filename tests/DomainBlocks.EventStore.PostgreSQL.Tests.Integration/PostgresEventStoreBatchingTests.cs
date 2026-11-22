@@ -1,5 +1,4 @@
 using DomainBlocks.Testing.Integration.EventStore;
-using Npgsql;
 using NUnit.Framework;
 using Shouldly;
 
@@ -50,13 +49,10 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
     [CancelAfter(TestTimeouts.DefaultMillis)]
     public async Task ConcurrentAppends_MixedOutcomesInBatch_CompleteIndividually(CancellationToken ct)
     {
-        await using var eventStore = CreateEventStore("_mixed", new PostgresEventStoreOptions
-        {
-            Schema = Schema,
-            AppendBatchingDelay = TimeSpan.FromMilliseconds(50)
-        });
-
+        await using var eventStore = CreateEventStore("_mixed");
         await eventStore.AppendAsync("existing", [Appendable("seed")], cancellationToken: ct);
+
+        await using var held = await HeldBatch.StartAsync(eventStore, DataSource, Schema, ct);
 
         var anyTasks = Enumerable.Range(0, 10)
             .Select(i => eventStore.AppendAsync("existing", [Appendable($"any-{i}")], cancellationToken: ct))
@@ -78,43 +74,38 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
                 cancellationToken: ct))
             .ToArray();
 
+        await held.ReleaseAsync(ct);
         await Task.WhenAll(anyTasks);
 
         foreach (var task in createTasks.Concat(staleTasks))
             await Should.ThrowAsync<StreamAppendConflictException<StreamPosition>>(() => task);
 
-        var rows = await Client.ReadRowsAsync();
+        var rows = (await Client.ReadRowsAsync()).Where(x => x.StreamId == "existing").ToList();
         rows.Count.ShouldBe(11);
         rows.Select(x => x.StreamPosition).ShouldBe(Enumerable.Range(0, 11).Select(i => (long)i));
-        (await Client.GetSequenceNextAsync()).ShouldBe(11);
+        (await Client.GetSequenceNextAsync()).ShouldBe(12);
     }
 
     [Test]
     [CancelAfter(TestTimeouts.DefaultMillis)]
-    public async Task ConcurrentAppends_AreCoalescedIntoBatches(CancellationToken ct)
+    public async Task ConcurrentAppends_QueuedBehindBatch_CommitInOneBatch(CancellationToken ct)
     {
         const int appendCount = 50;
 
-        await using var eventStore = CreateEventStore("_coalesced", new PostgresEventStoreOptions
-        {
-            Schema = Schema,
-            AppendBatchingDelay = TimeSpan.FromMilliseconds(50)
-        });
+        await using var eventStore = CreateEventStore("_coalesced");
+        await using var held = await HeldBatch.StartAsync(eventStore, DataSource, Schema, ct);
 
         var tasks = Enumerable.Range(0, appendCount)
-            .Select(i => eventStore.AppendAsync($"s{i}", [Appendable($"e{i}")], cancellationToken: ct));
+            .Select(i => eventStore.AppendAsync($"s{i}", [Appendable($"e{i}")], cancellationToken: ct))
+            .ToArray();
 
+        await held.ReleaseAsync(ct);
         await Task.WhenAll(tasks);
 
-        // Every row in a batch shares the batch's created_at, so the number of distinct timestamps is the number of
-        // batches that were committed.
-        var rows = await Client.ReadRowsAsync();
-        var batchCount = rows.Select(x => x.CreatedAt).Distinct().Count();
-
-        await TestContext.Out.WriteLineAsync($"{appendCount} appends were committed in {batchCount} batch(es)");
-
+        // Every row in a batch shares the batch's created_at.
+        var rows = (await Client.ReadRowsAsync()).Where(x => x.StreamId != HeldBatch.StreamId).ToList();
         rows.Count.ShouldBe(appendCount);
-        batchCount.ShouldBeLessThan(appendCount);
+        rows.Select(x => x.CreatedAt).Distinct().Count().ShouldBe(1);
     }
 
     [Test]
@@ -124,13 +115,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         var eventStore = CreateEventStore("_dispose");
 
         // Hold the sequence row so that the appender's batch blocks inside the database.
-        await using var connection = await DataSource.OpenConnectionAsync(ct);
-        await using var transaction = await connection.BeginTransactionAsync(ct);
-
-        await using (var lockCommand = new NpgsqlCommand($"SELECT next FROM {Schema}.sequences FOR UPDATE", connection))
-        {
-            await lockCommand.ExecuteNonQueryAsync(ct);
-        }
+        await using var rowLock = await SequenceRowLock.AcquireAsync(DataSource, Schema, ct);
 
         var tasks = Enumerable.Range(0, 5)
             .Select(i => eventStore.AppendAsync($"s{i}", [Appendable($"e{i}")], cancellationToken: ct))
@@ -144,7 +129,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         foreach (var task in tasks)
             await Should.ThrowAsync<OperationCanceledException>(() => task);
 
-        await transaction.RollbackAsync(ct);
+        await rowLock.ReleaseAsync(ct);
 
         (await Client.ReadRowsAsync(cancellationToken: ct)).ShouldBeEmpty();
     }
@@ -210,8 +195,7 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         (await Client.ReadRowsAsync(cancellationToken: ct)).Count(x => x.StreamId == "s1").ShouldBe(1);
     }
 
-    // Makes the same append twice in one batch: both queue up while a test transaction holds the sequence row, so the
-    // batch before them waits inside the database.
+    // Makes the same append twice in one batch: both queue up behind a held batch.
     private async Task<(Task First, Task Repeat)> AppendTwiceInOneBatchAsync(
         IEventStore<object, string, StreamPosition, LogPosition> eventStore,
         string streamId,
@@ -219,36 +203,13 @@ public class PostgresEventStoreBatchingTests : PostgresIntegrationTest
         Guid commitId,
         CancellationToken ct)
     {
-        await using var connection = await DataSource.OpenConnectionAsync(ct);
-        await using var transaction = await connection.BeginTransactionAsync(ct);
-
-        await using (var lockCommand = new NpgsqlCommand($"SELECT next FROM {Schema}.sequences FOR UPDATE", connection))
-        {
-            await lockCommand.ExecuteNonQueryAsync(ct);
-        }
-
-        var held = eventStore.AppendAsync("held", [Appendable("held")], cancellationToken: ct);
-        await WaitUntilBlockingAsync(connection.ProcessID, ct);
+        await using var held = await HeldBatch.StartAsync(eventStore, DataSource, Schema, ct);
 
         AppendableEvent<object>[] events = [Appendable("e")];
         var first = eventStore.AppendAsync(streamId, events, expectedState, commitId, cancellationToken: ct);
         var repeat = eventStore.AppendAsync(streamId, events, expectedState, commitId, cancellationToken: ct);
 
-        await transaction.RollbackAsync(ct);
-        await held;
-
+        await held.ReleaseAsync(ct);
         return (first, repeat);
-    }
-
-    // Polls outside the holder's transaction, which would keep seeing the activity snapshot it took first.
-    private async Task WaitUntilBlockingAsync(int holderProcessId, CancellationToken ct)
-    {
-        await using var command = DataSource.CreateCommand(
-            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY (pg_blocking_pids(pid)))");
-
-        command.Parameters.Add(new NpgsqlParameter<int> { TypedValue = holderProcessId });
-
-        while (!(bool)(await command.ExecuteScalarAsync(ct))!)
-            await Task.Delay(20, ct);
     }
 }

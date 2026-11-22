@@ -43,17 +43,6 @@ public class PostgresEventStoreBuilderTests
         seen.ShouldBe(["first"]);
     }
 
-    [Test]
-    public async Task Build_TooLongBatchingDelay_Throws()
-    {
-        await using var dataSource = new NpgsqlDataSourceBuilder("Host=localhost").Build();
-        var builder = CreateBuilder(dataSource, o => o.AppendBatchingDelay = LongerThanCancelAfter);
-
-        var ex = Should.Throw<ArgumentOutOfRangeException>(builder.Build);
-
-        ex.ParamName.ShouldEndWith($".{nameof(PostgresEventStoreOptions.AppendBatchingDelay)}");
-    }
-
     [TestCaseSource(nameof(OutOfRangePeriods))]
     public async Task Build_OutOfRangeInactiveSlotTimeout_Throws(TimeSpan timeout)
     {
@@ -115,7 +104,6 @@ public class PostgresEventStoreBuilderTests
         await using var dataSource = new NpgsqlDataSourceBuilder("Host=localhost").Build();
         var builder = CreateBuilder(dataSource, o =>
         {
-            o.AppendBatchingDelay = CancellationTokenSource.MaxSupportedDelay;
             o.Replication.InactiveSlotTimeout = PeriodicTimer.MaxSupportedPeriod;
             o.Replication.WalReceiverTimeout = CancellationTokenSource.MaxSupportedDelay;
             o.Replication.WalReceiverStatusInterval = PeriodicTimer.MaxSupportedPeriod;
