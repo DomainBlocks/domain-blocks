@@ -74,6 +74,42 @@ public static class BenchmarkReport
         await output.WriteLineAsync($"gc:            {result.Gc}");
     }
 
+    public static async Task WriteOpenLoopAsync(string title, OpenLoopResult result)
+    {
+        var output = TestContext.Out;
+        var seconds = result.Duration.TotalSeconds;
+        var timerMillis = result.TimerProbe.TotalMilliseconds;
+
+        await output.WriteLineAsync($"--- {title} ---");
+        await output.WriteLineAsync($"offered:       {result.Rate:N0} ops/s, random arrivals");
+        await output.WriteLineAsync($"scheduled:     {result.Scheduled:N0} in {seconds:F1} s");
+        await output.WriteLineAsync($"completed:     {result.Completed:N0} ({result.CompletedFraction:P2})");
+        await output.WriteLineAsync($"sustained:     {DescribeSustained(result)}");
+        await output.WriteLineAsync($"errors:        {result.Errors:N0}");
+        await output.WriteLineAsync($"throughput:    {result.OpsPerSecond:N0} ops/s");
+
+        await output.WriteLineAsync("latency from scheduled arrival:");
+        await WritePercentilesAsync(output, result.Latencies);
+
+        await output.WriteLineAsync($"in flight:     at most {result.MaxOutstanding:N0}");
+        await output.WriteLineAsync($"issue lag:     at most {result.MaxIssueLag.TotalMilliseconds:F3} ms");
+        await output.WriteLineAsync($"timer:         a 1 ms delay took {timerMillis:F2} ms (median of 21)");
+        await output.WriteLineAsync($"gc:            {result.Gc}");
+    }
+
+    private static string DescribeSustained(OpenLoopResult result)
+    {
+        if (result.StoppedEarly)
+            return $"no, arrivals stopped with {result.MaxOutstanding:N0} in flight";
+
+        if (result.Undrained > 0)
+            return $"no, {result.Undrained:N0} still in flight after the drain timeout";
+
+        return result.IsSustained
+            ? "yes"
+            : $"no, completed less than {OpenLoopResult.SustainedFraction:P0} of the arrivals";
+    }
+
     private static async Task WriteEnvironmentDetailsAsync(
         TextWriter output,
         Type systemUnderTest,
@@ -95,6 +131,9 @@ public static class BenchmarkReport
         await output.WriteLineAsync($"sut build:     {systemBuild} ({systemAssembly.GetName().Name})");
         await output.WriteLineAsync($"harness build: {harnessBuild}");
         await output.WriteLineAsync($"debugger:      {(debuggerAttached ? "attached" : "not attached")}");
+
+        if (NetworkLatencyProxy.RunWide is { } proxy)
+            await output.WriteLineAsync($"network:       {proxy.Description} added to each reply, through Toxiproxy");
 
         if (debuggerAttached)
             warnings.Add("a debugger is attached");

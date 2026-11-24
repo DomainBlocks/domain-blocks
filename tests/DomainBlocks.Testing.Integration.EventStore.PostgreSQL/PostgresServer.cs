@@ -1,3 +1,5 @@
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Networks;
 using Testcontainers.PostgreSql;
 
 namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
@@ -11,14 +13,22 @@ public sealed class PostgresServer : IAsyncDisposable
     public const string DefaultImage = "postgres:17";
     public const string ImageEnvironmentVariable = "DBX_POSTGRES_IMAGE";
 
+    /// <summary>
+    /// The name that resolves to the server's container from other containers on <see cref="Network"/>.
+    /// </summary>
+    public const string NetworkAlias = "postgres";
+
     private readonly PostgreSqlContainer _container;
 
-    private PostgresServer(PostgreSqlContainer container)
+    private PostgresServer(INetwork network, PostgreSqlContainer container)
     {
+        Network = network;
         _container = container;
     }
 
     public string ConnectionString => _container.GetConnectionString();
+
+    public INetwork Network { get; }
 
     public static async Task<PostgresServer> StartAsync()
     {
@@ -26,17 +36,26 @@ public sealed class PostgresServer : IAsyncDisposable
             ? configured
             : DefaultImage;
 
+        var network = new NetworkBuilder()
+            .WithName($"postgres-test-{Guid.NewGuid():N}")
+            .Build();
+
+        await network.CreateAsync();
+
         var container = new PostgreSqlBuilder(image)
             .WithCommand("-c", "wal_level=logical", "-c", "max_replication_slots=16", "-c", "max_wal_senders=16")
+            .WithNetwork(network)
+            .WithNetworkAliases(NetworkAlias)
             .Build();
 
         await container.StartAsync();
 
-        return new PostgresServer(container);
+        return new PostgresServer(network, container);
     }
 
     public async ValueTask DisposeAsync()
     {
         await _container.DisposeAsync();
+        await Network.DisposeAsync();
     }
 }

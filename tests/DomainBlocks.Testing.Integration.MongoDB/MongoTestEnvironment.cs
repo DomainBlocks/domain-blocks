@@ -30,6 +30,30 @@ public static class MongoTestEnvironment
         TestMongoSerialization.Configure();
     }
 
+    /// <summary>
+    /// Returns the replica set's connection string with its server replaced by a proxy's address.
+    /// </summary>
+    public static string GetConnectionString(string proxyHostname, int proxyPort)
+    {
+        var builder = new MongoUrlBuilder(ReplicaSet.ConnectionString)
+        {
+            Server = new MongoServerAddress(proxyHostname, proxyPort)
+        };
+
+        return builder.ToMongoUrl().ToString();
+    }
+
+    /// <summary>
+    /// Routes <see cref="ConnectionString"/> and <see cref="MongoClient"/> through a proxy in front of the replica set,
+    /// such as one that adds network latency. Call it before any fixture connects.
+    /// </summary>
+    public static void UseProxy(string proxyHostname, int proxyPort)
+    {
+        ConnectionString = GetConnectionString(proxyHostname, proxyPort);
+        MongoClient.Dispose();
+        MongoClient = new MongoClient(ConnectionString);
+    }
+
     public static async Task StopAsync()
     {
         LoggerFactory.Dispose();

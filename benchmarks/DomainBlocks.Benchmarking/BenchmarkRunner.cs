@@ -4,8 +4,9 @@ using HdrHistogram;
 namespace DomainBlocks.Benchmarking;
 
 /// <summary>
-/// Measures an operation's latency and throughput with closed-loop workers. Latencies are recorded in
-/// <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three significant digits.
+/// Measures an operation's latency and throughput, with closed-loop workers or with open-loop arrivals. Latencies are
+/// recorded in <see cref="Stopwatch"/> ticks to an HdrHistogram with microsecond resolution and three significant
+/// digits.
 /// </summary>
 public sealed class BenchmarkRunner
 {
@@ -192,5 +193,36 @@ public sealed class BenchmarkRunner
         {
             Volatile.Write(ref _stop, true);
         }
+    }
+
+    /// <summary>
+    /// Measures an open loop: operations arrive at random, at a mean of <see cref="OpenLoopOptions.Rate"/> a second,
+    /// whatever the operations in flight do, as calls from independent callers would. Each operation's latency runs
+    /// from its scheduled arrival, so time spent waiting behind slower operations counts. On Windows, the timer
+    /// resolution is raised to 1 ms for the run, so that timers in the system under test aren't rounded up to the
+    /// clock's default tick.
+    /// </summary>
+    /// <remarks>
+    /// Operations are given no cancellation token. Cancelling the run stops the arrivals, and operations still in
+    /// flight are left to finish.
+    /// </remarks>
+    public async Task<OpenLoopResult> MeasureOpenLoopAsync(
+        BenchmarkOperation operation,
+        OpenLoopOptions options,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.Rate);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.MaxOutstanding);
+
+        using var timerResolution = TimerResolution.Raise();
+        var timerProbe = await TimerResolution.ProbeAsync(cancellationToken);
+
+        var latencies = new LongConcurrentHistogram(LowestTrackableTicks, HighestTrackableTicks, SignificantDigits);
+        var run = new OpenLoopRun(operation, options, latencies);
+
+        await run.IssueAsync(cancellationToken);
+        var undrained = await run.DrainAsync(cancellationToken);
+
+        return run.ToResult(undrained, timerProbe);
     }
 }

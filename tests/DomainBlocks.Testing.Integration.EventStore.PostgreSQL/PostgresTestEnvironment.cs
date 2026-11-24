@@ -9,7 +9,7 @@ namespace DomainBlocks.Testing.Integration.EventStore.PostgreSQL;
 /// </summary>
 public static class PostgresTestEnvironment
 {
-    private static PostgresServer? _server;
+    public static PostgresServer Server { get; private set; } = null!;
 
     /// <summary>
     /// A data source for administration and raw SQL against any schema on the server. A fixture's store uses the
@@ -26,10 +26,10 @@ public static class PostgresTestEnvironment
 
     public static async Task StartAsync()
     {
-        _server = await PostgresServer.StartAsync();
+        Server = await PostgresServer.StartAsync();
         LoggerFactory = TestLoggerFactory.Create();
 
-        var connectionString = new NpgsqlConnectionStringBuilder(_server.ConnectionString)
+        var connectionString = new NpgsqlConnectionStringBuilder(Server.ConnectionString)
         {
             // The replication connection is built from the data source's connection string, which only carries the
             // password when security info is persisted.
@@ -58,12 +58,28 @@ public static class PostgresTestEnvironment
         return builder.Build();
     }
 
+    /// <summary>
+    /// Routes <see cref="ConnectionString"/> and <see cref="DataSource"/>, and the data sources built after it, through
+    /// a proxy in front of the server, such as one that adds network latency. Call it before any fixture connects.
+    /// </summary>
+    public static async Task UseProxyAsync(string proxyHostname, int proxyPort)
+    {
+        ConnectionString = new NpgsqlConnectionStringBuilder(ConnectionString)
+        {
+            Host = proxyHostname,
+            Port = proxyPort
+        }.ConnectionString;
+
+        await DataSource.DisposeAsync();
+        DataSource = CreateDataSource();
+    }
+
     public static async Task StopAsync()
     {
         LoggerFactory.Dispose();
         await DataSource.DisposeAsync();
 
-        if (_server is not null)
-            await _server.DisposeAsync();
+        if (Server is not null)
+            await Server.DisposeAsync();
     }
 }

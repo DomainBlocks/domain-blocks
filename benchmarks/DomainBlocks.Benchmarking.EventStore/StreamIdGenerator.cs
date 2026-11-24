@@ -51,7 +51,13 @@ public sealed class StreamIdGenerator
     /// <summary>
     /// Returns the ID of the stream that a worker's next append of one event goes to.
     /// </summary>
-    public string Next(int workerIndex)
+    public string Next(int workerIndex) => Next(workerIndex, out _);
+
+    /// <summary>
+    /// Returns the ID of the stream that a worker's next append of one event goes to, and the number of events the
+    /// stream holds before that append.
+    /// </summary>
+    public string Next(int workerIndex, out int eventCount)
     {
         ref var stream = ref _workerStreams[workerIndex];
 
@@ -69,7 +75,7 @@ public sealed class StreamIdGenerator
             stream.EventCount = 0;
         }
 
-        stream.EventCount++;
+        eventCount = stream.EventCount++;
         return stream.Id;
     }
 
