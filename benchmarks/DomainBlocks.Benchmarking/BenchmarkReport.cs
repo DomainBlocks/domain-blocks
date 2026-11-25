@@ -158,6 +158,13 @@ public static class BenchmarkReport
 
     private static async Task WritePercentilesAsync(TextWriter output, HistogramBase latencies)
     {
+        // An open loop whose arrivals stop during the warm-up records nothing, and an empty histogram throws.
+        if (latencies.TotalCount == 0)
+        {
+            await output.WriteLineAsync("samples:       none");
+            return;
+        }
+
         var mean = Millis(latencies.GetMean());
         var standardDeviation = Millis(latencies.GetStdDeviation());
 
