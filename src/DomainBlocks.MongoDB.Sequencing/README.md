@@ -196,9 +196,7 @@ flight. With one instance:
 |             1,000 | 5 ms           |               137,000 |               87,000 |
 |             2,000 | none           |               136,000 |               84,000 |
 
-At 1,000 in flight, the delay raised throughput by about a third on the MacBook Air. On the Windows PC, the gain was
-smaller than the variation between rounds. Doubling the appends in flight did about as well as the delay on both
-machines.
+Doubling the appends in flight did about as well as the delay on both machines.
 
 On Windows, every run here raised the system clock's resolution to 1 ms; at the default resolution, a 1 ms delay lasts
 about 15 ms.
