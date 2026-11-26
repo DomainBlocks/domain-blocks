@@ -154,7 +154,7 @@ majority of members to acknowledge each commit.
 
 ### Latency
 
-Latency in milliseconds with no network latency added, at fixed rates and with one append in flight:
+Latency in milliseconds with no network latency added:
 
 | Instances | Load               | MacBook Air p50 | MacBook Air p99 | Windows PC p50 | Windows PC p99 |
 |----------:|:-------------------|----------------:|----------------:|---------------:|---------------:|
