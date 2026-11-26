@@ -230,7 +230,7 @@ public class MongoSequencedAppenderBenchmarkTests
         MongoSequencedAppenderOptions options,
         NetworkLatencyProxy? proxy = null)
     {
-        var networkLatency = (proxy ?? NetworkLatencyProxy.RunWide)?.Description ?? "none";
+        var networkLatency = (proxy ?? NetworkLatencyProxy.Shared)?.Description ?? "none";
 
         var description =
             $"MongoSequencedAppender: batch size {options.MaxBatchSize}, queue capacity {options.QueueCapacity}, " +

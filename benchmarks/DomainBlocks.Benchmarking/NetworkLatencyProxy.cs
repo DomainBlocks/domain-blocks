@@ -30,10 +30,11 @@ public sealed class NetworkLatencyProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// The proxy that <see cref="StartFromEnvironmentAsync"/> started for every connection in the run, if any, which
-    /// <see cref="BenchmarkReport"/> names in the environment header.
+    /// The proxy that every connection in the run shares, if <see cref="StartFromEnvironmentAsync"/> started one, as
+    /// opposed to a proxy that a single test starts for itself. <see cref="BenchmarkReport"/> names it in the
+    /// environment header.
     /// </summary>
-    public static NetworkLatencyProxy? RunWide { get; private set; }
+    public static NetworkLatencyProxy? Shared { get; private set; }
 
     public string Hostname => _container.Hostname;
 
@@ -101,14 +102,14 @@ public sealed class NetworkLatencyProxy : IAsyncDisposable
                 $"{LatencyEnvironmentVariable} must be a whole number of milliseconds, not '{value}'.");
         }
 
-        RunWide = await StartAsync(network, upstreamAlias, upstreamPort, latencyMillis);
-        return RunWide;
+        Shared = await StartAsync(network, upstreamAlias, upstreamPort, latencyMillis);
+        return Shared;
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (RunWide == this)
-            RunWide = null;
+        if (Shared == this)
+            Shared = null;
 
         _connection.Dispose();
         await _container.DisposeAsync();

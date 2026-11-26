@@ -133,7 +133,7 @@ public static class BenchmarkReport
         await output.WriteLineAsync($"harness build: {harnessBuild}");
         await output.WriteLineAsync($"debugger:      {(debuggerAttached ? "attached" : "not attached")}");
 
-        if (NetworkLatencyProxy.RunWide is { } proxy)
+        if (NetworkLatencyProxy.Shared is { } proxy)
             await output.WriteLineAsync($"network:       {proxy.Description} added to each reply, through Toxiproxy");
 
         if (debuggerAttached)
