@@ -17,6 +17,12 @@ public sealed class NetworkLatencyProxy : IAsyncDisposable
     /// </summary>
     public const string LatencyEnvironmentVariable = "DBX_BENCHMARK_NETWORK_LATENCY_MS";
 
+    /// <summary>
+    /// The environment variable that <see cref="StartFromEnvironmentAsync"/> reads the jitter from, in milliseconds.
+    /// It's optional, and varies each reply's latency by up to that much either way.
+    /// </summary>
+    public const string JitterEnvironmentVariable = "DBX_BENCHMARK_NETWORK_JITTER_MS";
+
     private const int ProxyPort = ToxiproxyBuilder.FirstProxiedPort;
 
     private readonly ToxiproxyContainer _container;
@@ -82,27 +88,28 @@ public sealed class NetworkLatencyProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Starts a proxy that adds the latency <see cref="LatencyEnvironmentVariable"/> sets, so that a script can run a
-    /// whole benchmark project through it, or returns <see langword="null"/> if the variable isn't set. Zero adds no
-    /// latency, which measures what the proxy itself costs.
+    /// Starts a proxy that adds the latency <see cref="LatencyEnvironmentVariable"/> sets, with the jitter that
+    /// <see cref="JitterEnvironmentVariable"/> sets, if any, so that a script can run a whole benchmark project through
+    /// it, or returns <see langword="null"/> if the latency isn't set. Zero adds no latency, which measures what the
+    /// proxy itself costs.
     /// </summary>
     public static async Task<NetworkLatencyProxy?> StartFromEnvironmentAsync(
         INetwork network,
         string upstreamAlias,
         int upstreamPort)
     {
-        var value = Environment.GetEnvironmentVariable(LatencyEnvironmentVariable);
+        var latencyMillis = ReadMillisFromEnvironment(LatencyEnvironmentVariable);
+        var jitterMillis = ReadMillisFromEnvironment(JitterEnvironmentVariable);
 
-        if (string.IsNullOrEmpty(value))
-            return null;
-
-        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var latencyMillis))
+        if (latencyMillis is null)
         {
-            throw new InvalidOperationException(
-                $"{LatencyEnvironmentVariable} must be a whole number of milliseconds, not '{value}'.");
+            return jitterMillis is null
+                ? null
+                : throw new InvalidOperationException(
+                    $"{JitterEnvironmentVariable} applies only with {LatencyEnvironmentVariable}, which isn't set.");
         }
 
-        Shared = await StartAsync(network, upstreamAlias, upstreamPort, latencyMillis);
+        Shared = await StartAsync(network, upstreamAlias, upstreamPort, latencyMillis.Value, jitterMillis ?? 0);
         return Shared;
     }
 
@@ -113,5 +120,18 @@ public sealed class NetworkLatencyProxy : IAsyncDisposable
 
         _connection.Dispose();
         await _container.DisposeAsync();
+    }
+
+    private static int? ReadMillisFromEnvironment(string variable)
+    {
+        var value = Environment.GetEnvironmentVariable(variable);
+
+        if (string.IsNullOrEmpty(value))
+            return null;
+
+        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var millis))
+            throw new InvalidOperationException($"{variable} must be a whole number of milliseconds, not '{value}'.");
+
+        return millis;
     }
 }
