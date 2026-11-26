@@ -26,7 +26,7 @@ internal sealed class SequenceRowLock(
         return rowLock;
     }
 
-    // Returns once the test transaction waits for the lock, so it takes the lock before any later request does.
+    // Returns once the test transaction waits for the lock, so later requests that find the row locked queue behind it.
     public static async Task<SequenceRowLock> QueueAsync(
         NpgsqlDataSource dataSource,
         string schema,
