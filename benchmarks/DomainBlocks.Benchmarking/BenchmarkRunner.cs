@@ -215,7 +215,7 @@ public sealed class BenchmarkRunner
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.MaxInFlight);
 
         using var timerResolution = TimerResolution.Raise();
-        var timerProbe = await TimerResolution.ProbeAsync(cancellationToken);
+        var oneMillisecondDelay = await TimerResolution.ProbeAsync(cancellationToken);
 
         var latencies = new LongConcurrentHistogram(LowestTrackableTicks, HighestTrackableTicks, SignificantDigits);
         var run = new OpenLoopRun(operation, options, latencies);
@@ -223,6 +223,6 @@ public sealed class BenchmarkRunner
         await run.IssueAsync(cancellationToken);
         var undrained = await run.DrainAsync(cancellationToken);
 
-        return run.ToResult(undrained, timerProbe);
+        return run.ToResult(undrained, oneMillisecondDelay);
     }
 }

@@ -82,7 +82,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         return Interlocked.Read(ref _inFlight);
     }
 
-    public OpenLoopResult ToResult(long undrained, TimeSpan timerProbe) => new(
+    public OpenLoopResult ToResult(long undrained, TimeSpan oneMillisecondDelay) => new(
         options.Rate,
         _scheduled,
         _windowEndCount - _windowStartCount,
@@ -93,7 +93,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         FromTicks(_maxIssueLag),
         _stoppedEarly,
         undrained,
-        timerProbe,
+        oneMillisecondDelay,
         _gc);
 
     private void Issue(CancellationToken cancellationToken)

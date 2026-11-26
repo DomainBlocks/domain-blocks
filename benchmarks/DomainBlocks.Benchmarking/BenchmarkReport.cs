@@ -78,7 +78,7 @@ public static class BenchmarkReport
     {
         var output = TestContext.Out;
         var seconds = result.Duration.TotalSeconds;
-        var timerMillis = result.TimerProbe.TotalMilliseconds;
+        var delayMillis = result.OneMillisecondDelay.TotalMilliseconds;
         var timerSamples = TimerResolution.ProbeSampleCount;
 
         await output.WriteLineAsync($"--- {title} ---");
@@ -94,7 +94,7 @@ public static class BenchmarkReport
 
         await output.WriteLineAsync($"in flight:     at most {result.MaxInFlight:N0}");
         await output.WriteLineAsync($"issue lag:     at most {result.MaxIssueLag.TotalMilliseconds:F3} ms");
-        await output.WriteLineAsync($"timer:         a 1 ms delay took {timerMillis:F2} ms (median of {timerSamples})");
+        await output.WriteLineAsync($"timer:         a 1 ms delay took {delayMillis:F2} ms (median of {timerSamples})");
         await output.WriteLineAsync($"gc:            {result.Gc}");
     }
 

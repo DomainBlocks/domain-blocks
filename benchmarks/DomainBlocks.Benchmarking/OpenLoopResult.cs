@@ -28,7 +28,7 @@ namespace DomainBlocks.Benchmarking;
 /// Whether arrivals stopped because <see cref="OpenLoopOptions.MaxInFlight"/> operations were in flight.
 /// </param>
 /// <param name="Undrained">The operations still in flight when the drain timed out.</param>
-/// <param name="TimerProbe">
+/// <param name="OneMillisecondDelay">
 /// The median time that a 1 ms delay took at the start of the run, which shows the timer resolution the run had.
 /// </param>
 /// <param name="Gc">The garbage collections during the window.</param>
@@ -43,7 +43,7 @@ public sealed record OpenLoopResult(
     TimeSpan MaxIssueLag,
     bool StoppedEarly,
     long Undrained,
-    TimeSpan TimerProbe,
+    TimeSpan OneMillisecondDelay,
     GcSnapshot Gc)
 {
     /// <summary>
