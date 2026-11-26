@@ -100,8 +100,7 @@ public sealed class PostgresEventStoreTestHarness(Action<PostgresEventStoreOptio
 
         return
             $"PostgresEventStore: schema {options.Schema}, append batch size {options.AppendMaxBatchSize}, " +
-            $"append queue capacity {options.AppendQueueCapacity}, batching delay {options.AppendBatchingDelay} " +
-            $"(min count {options.AppendBatchingDelayMinCount}); " +
+            $"append queue capacity {options.AppendQueueCapacity}; " +
             $"server {version}: wal_writer_delay {walWriterDelay}, synchronous_commit {synchronousCommit}, " +
             $"fsync {fsync}, shared_buffers {sharedBuffers}";
     }

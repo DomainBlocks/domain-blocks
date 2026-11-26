@@ -46,42 +46,6 @@ public sealed class PostgresEventStoreOptions
     } = 500;
 
     /// <summary>
-    /// Gets or sets the maximum time to wait for more append requests when a batch is not full. The default is
-    /// <see cref="TimeSpan.Zero"/>, which commits without waiting.
-    /// </summary>
-    /// <remarks>
-    /// A batch that is not full waits for up to this long before it commits, so a delay longer than an append's
-    /// <see cref="AppendOptions.Timeout"/> can make the append time out. The delay depends on the system clock, so a
-    /// delay shorter than the clock's resolution lasts about as long as the resolution. On Windows, the resolution is
-    /// about 15 ms by default.
-    /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    public TimeSpan AppendBatchingDelay
-    {
-        get;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
-            field = value;
-        }
-    } = TimeSpan.Zero;
-
-    /// <summary>
-    /// Gets or sets how many append requests a batch must already hold before <see cref="AppendBatchingDelay"/>
-    /// applies. The default is 0.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    public int AppendBatchingDelayMinCount
-    {
-        get;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(value);
-            field = value;
-        }
-    }
-
-    /// <summary>
     /// Gets or sets the number of events fetched per round trip when reading. The default is 1,000.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>

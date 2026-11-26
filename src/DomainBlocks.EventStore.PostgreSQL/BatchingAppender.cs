@@ -8,14 +8,13 @@ namespace DomainBlocks.EventStore.PostgreSQL;
 
 /// <summary>
 /// Queues append requests and commits each batch in one round trip. Every append serializes on the sequence row, so a
-/// batch lets one lock acquisition and one round trip serve many requests.
+/// batch lets one lock acquisition and one round trip serve many requests. Requests that queue while a batch commits
+/// go out together in the next one, so batches grow with the load without waiting for more requests.
 /// </summary>
 internal sealed class BatchingAppender : IAppender
 {
     private readonly AppendBatchCommand _command;
     private readonly int _maxBatchSize;
-    private readonly TimeSpan _batchingDelay;
-    private readonly int _batchingDelayMinCount;
     private readonly ILogger? _logger;
     private readonly Channel<AppendRequest> _channel;
     private readonly CancellationTokenSource _stopCts = new();
@@ -29,12 +28,8 @@ internal sealed class BatchingAppender : IAppender
         PostgresEventStoreOptions options,
         ILogger? logger)
     {
-        CancellationTokenSource.ThrowIfDelayOutOfRange(options.AppendBatchingDelay);
-
         _command = new AppendBatchCommand(dataSource, names);
         _maxBatchSize = options.AppendMaxBatchSize;
-        _batchingDelay = options.AppendBatchingDelay;
-        _batchingDelayMinCount = options.AppendBatchingDelayMinCount;
         _logger = logger;
 
         _channel = Channel.CreateBounded<AppendRequest>(new BoundedChannelOptions(options.AppendQueueCapacity)
@@ -95,28 +90,6 @@ internal sealed class BatchingAppender : IAppender
             while (await _channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
             {
                 TakeQueued(batch);
-
-                // Waiting briefly for more requests trades latency for larger batches.
-                if (_batchingDelay > TimeSpan.Zero &&
-                    batch.Count >= _batchingDelayMinCount &&
-                    batch.Count < _maxBatchSize)
-                {
-                    using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    delayCts.CancelAfter(_batchingDelay);
-
-                    try
-                    {
-                        while (batch.Count < _maxBatchSize &&
-                               await _channel.Reader.WaitToReadAsync(delayCts.Token).ConfigureAwait(false))
-                        {
-                            TakeQueued(batch);
-                        }
-                    }
-                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                    {
-                        // The delay elapsed; commit what we have.
-                    }
-                }
 
                 if (batch.Count == 0)
                     continue;
