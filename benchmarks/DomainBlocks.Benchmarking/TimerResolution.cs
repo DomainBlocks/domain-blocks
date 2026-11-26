@@ -8,10 +8,14 @@ namespace DomainBlocks.Benchmarking;
 /// </summary>
 /// <remarks>
 /// .NET timers on Windows round up to the system clock's tick, about 15.6 ms by default, so a 1 ms delay waits about
-/// 15.6 ms.
+/// 15.6 ms. The raise applies to every timer in the process, including the system under test's.
 /// </remarks>
 internal sealed class TimerResolution : IDisposable
 {
+    // An odd count has one middle sample. 21 lets the median ignore the few delays the scheduler stretches, and takes
+    // about a third of a second at the default tick.
+    public const int ProbeSampleCount = 21;
+
     private const uint PeriodMillis = 1;
 
     private readonly bool _raised;
@@ -29,7 +33,7 @@ internal sealed class TimerResolution : IDisposable
     /// </summary>
     public static async Task<TimeSpan> ProbeAsync(CancellationToken cancellationToken)
     {
-        var samples = new TimeSpan[21];
+        var samples = new TimeSpan[ProbeSampleCount];
 
         for (var i = 0; i < samples.Length; i++)
         {
