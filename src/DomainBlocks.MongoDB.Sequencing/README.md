@@ -135,7 +135,7 @@ are included in the repository and can be run against your own environment. Thes
 ### Sustainable throughput
 
 Each run warms up for 5 seconds, then measures for 20. The sustainable rate is the highest at which at least 99% of the
-appends due in that window complete within it, and the backlog then clears.
+appends due in that window complete within it.
 
 | Instances | Network latency | MacBook Air (ops/sec) | Windows PC (ops/sec) |
 |----------:|:----------------|----------------------:|---------------------:|
