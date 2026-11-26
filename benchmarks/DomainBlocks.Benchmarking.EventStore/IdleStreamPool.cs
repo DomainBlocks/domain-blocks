@@ -9,8 +9,8 @@ namespace DomainBlocks.Benchmarking.EventStore;
 /// </summary>
 /// <remarks>
 /// Each slot is a worker of a <see cref="StreamIdGenerator"/>, so streams are named and laid out as the closed-loop
-/// workers' are. A slot is used by one append at a time, so the generator's state for it needs no lock. The stream
-/// that has been idle longest is taken first, and a new slot is used only when no stream is idle.
+/// workers' are. The queue hands each idle slot to one taker, so a slot is used by one append at a time, and the
+/// generator's state for it needs no lock. The stream that has been idle longest is taken first.
 /// </remarks>
 public sealed class IdleStreamPool(int capacity, int eventsPerStream)
 {
@@ -26,6 +26,9 @@ public sealed class IdleStreamPool(int capacity, int eventsPerStream)
     {
         if (!_idle.TryDequeue(out var slot))
         {
+            // A stream being returned while this runs can be missed, and a new slot used instead. That only starts a
+            // new stream: every slot in use belongs to a lease not yet returned, so the slots in use never outnumber
+            // the leases taken at once.
             slot = Interlocked.Increment(ref _slotsUsed) - 1;
 
             if (slot >= capacity)
