@@ -3,6 +3,8 @@
   <ItemGroup>
     <PackageReference Include="HdrHistogram" />
     <PackageReference Include="NUnit" />
+    <PackageReference Include="Testcontainers.Toxiproxy" />
+    <PackageReference Include="ToxiproxyNetCore" />
   </ItemGroup>
 
 </Project>

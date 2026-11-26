@@ -62,11 +62,11 @@ internal sealed class AppenderBenchmarkScenario : IAsyncDisposable
     }
 
     /// <summary>
-    /// Appends one document, spreading workers over the appender instances.
+    /// Appends one document, spreading closed-loop workers or open-loop arrivals over the appender instances.
     /// </summary>
-    public Task AppendAsync(int workerIndex, CancellationToken cancellationToken)
+    public Task AppendAsync(int index, CancellationToken cancellationToken)
     {
-        var appender = _appenders[workerIndex % _appenders.Length];
+        var appender = _appenders[index % _appenders.Length];
 
         return appender.AppendAsync(
             [new BenchmarkDocument { Value = "Benchmark" }],

@@ -49,9 +49,11 @@ public sealed class StreamIdGenerator
     }
 
     /// <summary>
-    /// Returns the ID of the stream that a worker's next append of one event goes to.
+    /// Returns the ID of the stream that a worker's next append of one event goes to, and the version that append
+    /// expects: the version of the stream's last event, or <see langword="null"/> if the append creates the stream.
+    /// Each call counts the append it returns, so a worker calls it once per append.
     /// </summary>
-    public string Next(int workerIndex)
+    public (string StreamId, ulong? ExpectedVersion) Next(int workerIndex)
     {
         ref var stream = ref _workerStreams[workerIndex];
 
@@ -69,8 +71,13 @@ public sealed class StreamIdGenerator
             stream.EventCount = 0;
         }
 
+        // Positions in a stream count from zero, so the stream's version is one less than its number of events.
+        ulong? expectedVersion = stream.EventCount == 0 ? null : (ulong)stream.EventCount - 1;
+
+        // The append is counted when it's handed out rather than when it completes, so callers need no second call.
+        // That's safe because a worker has one append in flight, and a failed append fails the run.
         stream.EventCount++;
-        return stream.Id;
+        return (stream.Id, expectedVersion);
     }
 
     private struct WorkerStream

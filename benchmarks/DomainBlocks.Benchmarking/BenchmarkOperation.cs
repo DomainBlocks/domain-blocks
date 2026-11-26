@@ -1,7 +1,9 @@
 namespace DomainBlocks.Benchmarking;
 
 /// <summary>
-/// One operation against the system under test. <paramref name="workerIndex"/> lets callers spread workers over several
-/// instances, or keep state for each worker, without synchronization. A worker has one operation in flight at a time.
+/// One operation against the system under test. <paramref name="index"/> lets callers spread operations over several
+/// instances, or keep state for each worker, without synchronization. In a closed loop, it's the worker's index, and a
+/// worker has one operation in flight at a time. In an open loop, it numbers the arrivals from zero in the order they
+/// fall due, so each operation has its own, and operations overlap.
 /// </summary>
-public delegate Task BenchmarkOperation(int workerIndex, CancellationToken cancellationToken);
+public delegate Task BenchmarkOperation(int index, CancellationToken cancellationToken);

@@ -10,10 +10,11 @@ using Shouldly;
 namespace DomainBlocks.Benchmarking.EventStore;
 
 /// <summary>
-/// Append and read benchmarks shared by every store. Each append test writes one small event per append. Each worker
-/// appends to a stream of its own until the stream holds <see cref="DefaultEventsPerStream"/> events, unless the test
-/// sets another length, and then starts a new stream. Results are printed to the test output. An append test fails only
-/// if an append fails, and a read test fails only if it reads the wrong number of events.
+/// Append and read benchmarks shared by every store. Each append test writes one small event per append. In the
+/// closed-loop tests, each worker appends to a stream of its own until the stream holds
+/// <see cref="DefaultEventsPerStream"/> events, unless the test sets another length, and then starts a new stream. The
+/// open-loop test takes its streams from an <see cref="IdleStreamPool"/>. Results are printed to the test output. An
+/// append test fails only if an append fails, and a read test fails only if it reads the wrong number of events.
 /// </summary>
 [Category("Benchmark")]
 public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
@@ -47,7 +48,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
-            (workerIndex, token) => AppendAsync(eventStore, streamIdGenerator.Next(workerIndex), token),
+            (workerIndex, token) => AppendAsync(eventStore, streamIdGenerator.Next(workerIndex).StreamId, token),
             new LatencyOptions(),
             ct);
 
@@ -101,6 +102,46 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         MeasureAppendThroughputAsync(instanceCount: 1, inFlight: 1_000, DefaultEventsPerStream, nameCount, ct);
 
     /// <summary>
+    /// Append throughput and latency in an open loop: appends arrive at random, spread over one or more store
+    /// instances, at the rate that <see cref="OpenLoopOptions.RateEnvironmentVariable"/> sets, whatever the appends in
+    /// flight do. Each append goes to a stream with no append in flight and expects the stream's version, so appends
+    /// never conflict.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(4)]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public async Task AppendAsync_MeasureOpenLoop(int instanceCount, CancellationToken ct)
+    {
+        var options = OpenLoopOptions.FromEnvironment();
+        var instances = CreateInstances(instanceCount);
+
+        try
+        {
+            var streams = new IdleStreamPool(options.MaxInFlight, DefaultEventsPerStream);
+            var runner = new BenchmarkRunner();
+
+            var result = await runner.MeasureOpenLoopAsync(
+                (index, token) => AppendToIdleStreamAsync(instances[index % instanceCount], streams, token),
+                options,
+                ct);
+
+            await BenchmarkReport.WriteEnvironmentAsync(instances[0].GetType(), await Harness.DescribeAsync());
+
+            await BenchmarkReport.WriteOpenLoopAsync(
+                $"open-loop append, {instanceCount} instance(s), {options.Rate:N0}/s offered, " +
+                $"1 event per append, {DefaultEventsPerStream} events per stream",
+                result);
+
+            result.Errors.ShouldBe(0, "an open-loop figure with failed appends is not meaningful");
+        }
+        finally
+        {
+            await DisposeAllAsync(instances);
+        }
+    }
+
+    /// <summary>
     /// Read throughput: one reader reads a log of a hundred streams from start to end, several times over. The median
     /// pass is reported, along with what the passes allocated.
     /// </summary>
@@ -141,9 +182,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         int? nameCount,
         CancellationToken ct)
     {
-        var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
-        for (var i = 0; i < instanceCount; i++)
-            instances[i] = CreateEventStore(_eventTypeMap, loggerNameSuffix: $"_{i}");
+        var instances = CreateInstances(instanceCount);
 
         try
         {
@@ -153,7 +192,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
             var result = await runner.MeasureThroughputAsync(
                 (workerIndex, token) => AppendAsync(
                     instances[workerIndex % instanceCount],
-                    streamIdGenerator.Next(workerIndex),
+                    streamIdGenerator.Next(workerIndex).StreamId,
                     token),
                 new ThroughputOptions { InFlight = inFlight },
                 ct);
@@ -172,8 +211,44 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         }
         finally
         {
-            foreach (var instance in instances)
-                await instance.DisposeAsync();
+            await DisposeAllAsync(instances);
+        }
+    }
+
+    private IEventStore<object, string, TStreamPos, TLogPos>[] CreateInstances(int instanceCount)
+    {
+        var instances = new IEventStore<object, string, TStreamPos, TLogPos>[instanceCount];
+        for (var i = 0; i < instanceCount; i++)
+            instances[i] = CreateEventStore(_eventTypeMap, loggerNameSuffix: $"_{i}");
+
+        return instances;
+    }
+
+    private static async Task DisposeAllAsync(IEventStore<object, string, TStreamPos, TLogPos>[] instances)
+    {
+        foreach (var instance in instances)
+            await instance.DisposeAsync();
+    }
+
+    private async Task AppendToIdleStreamAsync(
+        IEventStore<object, string, TStreamPos, TLogPos> instance,
+        IdleStreamPool streams,
+        CancellationToken ct)
+    {
+        var lease = streams.Take();
+
+        try
+        {
+            var expectedState = lease.ExpectedVersion is { } version
+                ? ExpectedStreamState.AtVersion(CreateStreamPosition(version))
+                : ExpectedStreamState<TStreamPos>.DoesNotExist;
+
+            object[] events = [new TestEvent { Value = "Benchmark" }];
+            await instance.AppendAsync(lease.StreamId, events, expectedState, cancellationToken: ct);
+        }
+        finally
+        {
+            streams.Return(lease);
         }
     }
 

@@ -2,6 +2,7 @@ using DomainBlocks.Benchmarking;
 using DomainBlocks.Testing.Integration.MongoDB;
 using NUnit.Framework;
 using Shouldly;
+using Testcontainers.MongoDb;
 
 namespace DomainBlocks.MongoDB.Sequencing.Benchmarks;
 
@@ -109,6 +110,36 @@ public class MongoSequencedAppenderBenchmarkTests
     }
 
     /// <summary>
+    /// Measures append throughput and latency in an open loop: appends arrive at random, spread over one or more
+    /// appender instances, at the rate that <see cref="OpenLoopOptions.RateEnvironmentVariable"/> sets, whatever the
+    /// appends in flight do. Uses the default appender options.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(4)]
+    [Explicit("Benchmark")]
+    [CancelAfter(BenchmarkTimeouts.DefaultMillis)]
+    public async Task AppendAsync_MeasureOpenLoop(int instanceCount, CancellationToken ct)
+    {
+        var options = new MongoSequencedAppenderOptions();
+        var openLoopOptions = OpenLoopOptions.FromEnvironment();
+
+        await using var scenario = await AppenderBenchmarkScenario.CreateAsync(
+            MongoTestEnvironment.ConnectionString,
+            instanceCount,
+            options);
+
+        var result = await new BenchmarkRunner().MeasureOpenLoopAsync(scenario.AppendAsync, openLoopOptions, ct);
+
+        await WriteEnvironmentAsync(options);
+
+        await BenchmarkReport.WriteOpenLoopAsync(
+            $"open-loop append, {instanceCount} instance(s), {openLoopOptions.Rate:N0}/s offered",
+            result);
+
+        result.Errors.ShouldBe(0, "an open-loop figure with failed appends is not meaningful");
+    }
+
+    /// <summary>
     /// Measures the latency of a single append with no concurrent appends, through a proxy that delays the server's
     /// responses.
     /// </summary>
@@ -123,10 +154,10 @@ public class MongoSequencedAppenderBenchmarkTests
             BatchingDelayMinCount = 2
         };
 
-        await using var proxy = await MongoLatencyProxy.StartAsync(latencyMillis: 5, jitterMillis: 3);
+        await using var proxy = await StartLatencyProxyAsync(latencyMillis: 5, jitterMillis: 3);
 
         await using var scenario = await AppenderBenchmarkScenario.CreateAsync(
-            proxy.ConnectionString,
+            MongoTestEnvironment.GetConnectionString(proxy.Hostname, proxy.Port),
             instanceCount: 1,
             options);
 
@@ -166,10 +197,10 @@ public class MongoSequencedAppenderBenchmarkTests
             BatchingDelayMinCount = 2
         };
 
-        await using var proxy = await MongoLatencyProxy.StartAsync(latencyMillis: 30, jitterMillis: 5);
+        await using var proxy = await StartLatencyProxyAsync(latencyMillis: 30, jitterMillis: 5);
 
         await using var scenario = await AppenderBenchmarkScenario.CreateAsync(
-            proxy.ConnectionString,
+            MongoTestEnvironment.GetConnectionString(proxy.Hostname, proxy.Port),
             instanceCount: 1,
             options);
 
@@ -187,11 +218,19 @@ public class MongoSequencedAppenderBenchmarkTests
         AssertSucceeded(result);
     }
 
+    private static Task<NetworkLatencyProxy> StartLatencyProxyAsync(int latencyMillis, int jitterMillis) =>
+        NetworkLatencyProxy.StartAsync(
+            MongoTestEnvironment.ReplicaSet.Network,
+            MongoReplicaSet.NetworkAlias,
+            MongoDbBuilder.MongoDbPort,
+            latencyMillis,
+            jitterMillis);
+
     private static async Task WriteEnvironmentAsync(
         MongoSequencedAppenderOptions options,
-        MongoLatencyProxy? proxy = null)
+        NetworkLatencyProxy? proxy = null)
     {
-        var networkLatency = proxy is null ? "none" : proxy.Description;
+        var networkLatency = (proxy ?? NetworkLatencyProxy.Shared)?.Description ?? "none";
 
         var description =
             $"MongoSequencedAppender: batch size {options.MaxBatchSize}, queue capacity {options.QueueCapacity}, " +
