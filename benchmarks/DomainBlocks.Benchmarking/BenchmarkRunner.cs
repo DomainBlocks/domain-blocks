@@ -203,7 +203,7 @@ public sealed class BenchmarkRunner
     /// clock's default tick.
     /// </summary>
     /// <exception cref="TimeoutException">
-    /// Operations were still in flight <see cref="OpenLoopOptions.DrainTimeout"/> after the arrivals stopped.
+    /// Operations were still in flight after the arrivals stopped and the drain timeout elapsed.
     /// </exception>
     /// <remarks>
     /// Operations are given no cancellation token. Cancelling the run stops the arrivals, and operations still in
