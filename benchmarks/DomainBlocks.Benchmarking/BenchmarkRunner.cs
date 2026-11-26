@@ -202,6 +202,9 @@ public sealed class BenchmarkRunner
     /// resolution is raised to 1 ms for the run, so that timers in the system under test aren't rounded up to the
     /// clock's default tick.
     /// </summary>
+    /// <exception cref="TimeoutException">
+    /// Operations were still in flight after the arrivals stopped and the drain timeout elapsed.
+    /// </exception>
     /// <remarks>
     /// Operations are given no cancellation token. Cancelling the run stops the arrivals, and operations still in
     /// flight are left to finish.
@@ -221,8 +224,8 @@ public sealed class BenchmarkRunner
         var run = new OpenLoopRun(operation, options, latencies);
 
         await run.IssueAsync(cancellationToken);
-        var undrained = await run.DrainAsync(cancellationToken);
+        await run.DrainAsync(cancellationToken);
 
-        return run.ToResult(undrained, oneMillisecondDelay);
+        return run.ToResult(oneMillisecondDelay);
     }
 }

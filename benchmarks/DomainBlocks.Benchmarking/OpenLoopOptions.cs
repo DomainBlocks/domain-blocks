@@ -19,7 +19,10 @@ public sealed record OpenLoopOptions
 
     public TimeSpan Measure { get; init; } = TimeSpan.FromSeconds(20);
 
-    /// <summary>How long to wait after the measurement window for the operations still in flight.</summary>
+    /// <summary>
+    /// Gets how long to wait after the arrivals stop for the operations still in flight. The run fails if any
+    /// operations are still in flight after this timeout elapses.
+    /// </summary>
     public TimeSpan DrainTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>

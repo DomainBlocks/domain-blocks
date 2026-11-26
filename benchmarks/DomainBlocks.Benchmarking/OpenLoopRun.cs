@@ -62,9 +62,10 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
     }
 
     /// <summary>
-    /// Waits for the operations still in flight, and returns the number that didn't finish in time.
+    /// Waits for the operations still in flight to finish.
     /// </summary>
-    public async Task<long> DrainAsync(CancellationToken cancellationToken)
+    /// <exception cref="TimeoutException">Operations were still in flight after the drain timeout elapsed.</exception>
+    public async Task DrainAsync(CancellationToken cancellationToken)
     {
         Volatile.Write(ref _issued, true);
 
@@ -75,14 +76,16 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         {
             await _drained.Task.WaitAsync(options.DrainTimeout, cancellationToken);
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
+            throw new TimeoutException(
+                $"The drain timed out after {options.DrainTimeout.TotalSeconds} s with " +
+                $"{Interlocked.Read(ref _inFlight):N0} operation(s) still in flight.",
+                ex);
         }
-
-        return Interlocked.Read(ref _inFlight);
     }
 
-    public OpenLoopResult ToResult(long undrained, TimeSpan oneMillisecondDelay) => new(
+    public OpenLoopResult ToResult(TimeSpan oneMillisecondDelay) => new(
         options.Rate,
         _scheduled,
         _windowEndCount - _windowStartCount,
@@ -92,7 +95,6 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         _maxInFlight,
         FromTicks(_maxIssueLag),
         _stoppedEarly,
-        undrained,
         oneMillisecondDelay,
         _gc);
 
