@@ -78,11 +78,9 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         }
         catch (TimeoutException ex)
         {
-            // An operation still in flight after this long has most likely hung, and the figures would leave out its
-            // latency, so the run fails instead.
             throw new TimeoutException(
-                $"{Interlocked.Read(ref _inFlight):N0} operation(s) were still in flight " +
-                $"{options.DrainTimeout.TotalSeconds} s after the arrivals stopped.",
+                $"{Interlocked.Read(ref _inFlight):N0} operation(s) were still in flight after the arrivals stopped " +
+                $"and the {options.DrainTimeout.TotalSeconds} s drain timeout elapsed.",
                 ex);
         }
     }
