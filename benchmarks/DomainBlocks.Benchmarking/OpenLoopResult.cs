@@ -27,7 +27,6 @@ namespace DomainBlocks.Benchmarking;
 /// <param name="StoppedEarly">
 /// Whether arrivals stopped because <see cref="OpenLoopOptions.MaxInFlight"/> operations were in flight.
 /// </param>
-/// <param name="Undrained">The operations still in flight when the drain timed out.</param>
 /// <param name="OneMillisecondDelay">
 /// The median time that a 1 ms delay took at the start of the run, which shows the timer resolution the run had.
 /// </param>
@@ -42,7 +41,6 @@ public sealed record OpenLoopResult(
     long MaxInFlight,
     TimeSpan MaxIssueLag,
     bool StoppedEarly,
-    long Undrained,
     TimeSpan OneMillisecondDelay,
     GcSnapshot Gc)
 {
@@ -61,8 +59,8 @@ public sealed record OpenLoopResult(
     public double OpsPerSecond => Duration == TimeSpan.Zero ? 0 : Completed / Duration.TotalSeconds;
 
     /// <summary>
-    /// Whether the system kept up with the rate: arrivals never stopped early, at least
-    /// <see cref="SustainedFraction"/> of the window's arrivals completed in it, and every operation finished.
+    /// Whether the system kept up with the rate: arrivals never stopped early, and at least
+    /// <see cref="SustainedFraction"/> of the window's arrivals completed in it.
     /// </summary>
-    public bool IsSustained => !StoppedEarly && Undrained == 0 && CompletedFraction >= SustainedFraction;
+    public bool IsSustained => !StoppedEarly && CompletedFraction >= SustainedFraction;
 }

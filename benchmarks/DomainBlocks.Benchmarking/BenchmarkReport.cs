@@ -103,9 +103,6 @@ public static class BenchmarkReport
         if (result.StoppedEarly)
             return $"no, arrivals stopped with {result.MaxInFlight:N0} in flight";
 
-        if (result.Undrained > 0)
-            return $"no, {result.Undrained:N0} still in flight after the drain timeout";
-
         return result.IsSustained
             ? "yes"
             : $"no, completed less than {OpenLoopResult.SustainedFraction:P0} of the arrivals";
