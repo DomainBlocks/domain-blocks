@@ -144,8 +144,8 @@ appends due in that window complete within it.
 |         1 | 1 ms            |                79,000 |               54,000 |
 |         4 | 1 ms            |                67,000 |               54,000 |
 
-Adding instances doesn't raise the sustainable rate: every transaction takes its turn on the counter document, whichever
-instance runs it. On the MacBook Air, more instances lower it.
+Adding instances doesn't raise the sustainable rate, because the instances' transactions take turns on the counter
+document. On the MacBook Air, more instances lower the rate.
 
 For the 1 ms rows, a proxy delays each of the server's responses by 1 ms. A single append's median latency then rises
 from 0.64 ms to 10 ms on the MacBook Air, and from 3.0 ms to 7.2 ms on the Windows PC.
