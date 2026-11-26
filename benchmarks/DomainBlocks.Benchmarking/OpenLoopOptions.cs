@@ -25,7 +25,7 @@ public sealed record OpenLoopOptions
     /// <summary>
     /// The number of operations in flight at which arrivals stop and the run ends early, unsustained.
     /// </summary>
-    public int MaxOutstanding { get; init; } = 100_000;
+    public int MaxInFlight { get; init; } = 100_000;
 
     /// <summary>The seed for the arrival times, so that every run at a rate offers the same arrivals.</summary>
     public int Seed { get; init; }

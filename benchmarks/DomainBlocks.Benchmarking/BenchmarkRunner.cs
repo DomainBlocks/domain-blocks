@@ -212,7 +212,7 @@ public sealed class BenchmarkRunner
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.Rate);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.MaxOutstanding);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.MaxInFlight);
 
         using var timerResolution = TimerResolution.Raise();
         var timerProbe = await TimerResolution.ProbeAsync(cancellationToken);

@@ -19,13 +19,13 @@ namespace DomainBlocks.Benchmarking;
 /// <see cref="System.Diagnostics.Stopwatch"/> ticks.
 /// </param>
 /// <param name="Errors">The operations that failed.</param>
-/// <param name="MaxOutstanding">The most operations in flight at once.</param>
+/// <param name="MaxInFlight">The most operations in flight at once.</param>
 /// <param name="MaxIssueLag">
 /// The longest time by which an arrival was issued after its scheduled time. It's normally a few microseconds. More
 /// means that the issuing thread fell behind, and the lateness counts in the latencies.
 /// </param>
 /// <param name="StoppedEarly">
-/// Whether arrivals stopped because <see cref="OpenLoopOptions.MaxOutstanding"/> operations were in flight.
+/// Whether arrivals stopped because <see cref="OpenLoopOptions.MaxInFlight"/> operations were in flight.
 /// </param>
 /// <param name="Undrained">The operations still in flight when the drain timed out.</param>
 /// <param name="TimerProbe">
@@ -39,7 +39,7 @@ public sealed record OpenLoopResult(
     TimeSpan Duration,
     HistogramBase Latencies,
     int Errors,
-    long MaxOutstanding,
+    long MaxInFlight,
     TimeSpan MaxIssueLag,
     bool StoppedEarly,
     long Undrained,

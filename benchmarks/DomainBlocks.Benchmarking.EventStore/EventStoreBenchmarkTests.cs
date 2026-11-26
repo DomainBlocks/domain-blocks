@@ -118,7 +118,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
 
         try
         {
-            var streams = new IdleStreamPool(options.MaxOutstanding, DefaultEventsPerStream);
+            var streams = new IdleStreamPool(options.MaxInFlight, DefaultEventsPerStream);
             var runner = new BenchmarkRunner();
 
             var result = await runner.MeasureOpenLoopAsync(

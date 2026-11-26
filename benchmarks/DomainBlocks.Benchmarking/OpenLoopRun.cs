@@ -15,13 +15,13 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
     private readonly TaskCompletionSource _drained = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private long _completed;
-    private long _outstanding;
+    private long _inFlight;
     private int _errors;
     private bool _issued;
 
     // Written only by the issuing thread, and read once it has ended.
     private long _scheduled;
-    private long _maxOutstanding;
+    private long _maxInFlight;
     private long _maxIssueLag;
     private bool _stoppedEarly;
     private long _windowStart;
@@ -68,7 +68,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
     {
         Volatile.Write(ref _issued, true);
 
-        if (Interlocked.Read(ref _outstanding) == 0)
+        if (Interlocked.Read(ref _inFlight) == 0)
             _drained.TrySetResult();
 
         try
@@ -79,7 +79,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         {
         }
 
-        return Interlocked.Read(ref _outstanding);
+        return Interlocked.Read(ref _inFlight);
     }
 
     public OpenLoopResult ToResult(long undrained, TimeSpan timerProbe) => new(
@@ -89,7 +89,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         _windowStart == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(_windowStart, _windowEnd),
         latencies,
         Volatile.Read(ref _errors),
-        _maxOutstanding,
+        _maxInFlight,
         FromTicks(_maxIssueLag),
         _stoppedEarly,
         undrained,
@@ -139,7 +139,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
                 Thread.SpinWait(SpinIterations);
             }
 
-            if (Interlocked.Read(ref _outstanding) >= options.MaxOutstanding)
+            if (Interlocked.Read(ref _inFlight) >= options.MaxInFlight)
             {
                 _stoppedEarly = true;
 
@@ -150,7 +150,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
             }
 
             _maxIssueLag = Math.Max(_maxIssueLag, now - scheduled);
-            _maxOutstanding = Math.Max(_maxOutstanding, Interlocked.Increment(ref _outstanding));
+            _maxInFlight = Math.Max(_maxInFlight, Interlocked.Increment(ref _inFlight));
 
             var measured = scheduled >= windowStart;
 
@@ -197,7 +197,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         }
         finally
         {
-            if (Interlocked.Decrement(ref _outstanding) == 0 && Volatile.Read(ref _issued))
+            if (Interlocked.Decrement(ref _inFlight) == 0 && Volatile.Read(ref _issued))
                 _drained.TrySetResult();
         }
     }

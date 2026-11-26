@@ -92,7 +92,7 @@ public static class BenchmarkReport
         await output.WriteLineAsync("latency from scheduled arrival:");
         await WritePercentilesAsync(output, result.Latencies);
 
-        await output.WriteLineAsync($"in flight:     at most {result.MaxOutstanding:N0}");
+        await output.WriteLineAsync($"in flight:     at most {result.MaxInFlight:N0}");
         await output.WriteLineAsync($"issue lag:     at most {result.MaxIssueLag.TotalMilliseconds:F3} ms");
         await output.WriteLineAsync($"timer:         a 1 ms delay took {timerMillis:F2} ms (median of {timerSamples})");
         await output.WriteLineAsync($"gc:            {result.Gc}");
@@ -101,7 +101,7 @@ public static class BenchmarkReport
     private static string DescribeSustained(OpenLoopResult result)
     {
         if (result.StoppedEarly)
-            return $"no, arrivals stopped with {result.MaxOutstanding:N0} in flight";
+            return $"no, arrivals stopped with {result.MaxInFlight:N0} in flight";
 
         if (result.Undrained > 0)
             return $"no, {result.Undrained:N0} still in flight after the drain timeout";
