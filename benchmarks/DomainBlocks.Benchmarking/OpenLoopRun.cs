@@ -64,7 +64,7 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
     /// <summary>
     /// Waits for the operations still in flight to finish.
     /// </summary>
-    /// <exception cref="TimeoutException">Some were still in flight after the drain timeout.</exception>
+    /// <exception cref="TimeoutException">Operations were still in flight after the drain timeout elapsed.</exception>
     public async Task DrainAsync(CancellationToken cancellationToken)
     {
         Volatile.Write(ref _issued, true);
