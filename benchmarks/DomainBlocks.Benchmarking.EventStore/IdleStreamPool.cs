@@ -35,14 +35,16 @@ public sealed class IdleStreamPool(int capacity, int eventsPerStream)
                 throw new InvalidOperationException($"More than {capacity:N0} streams are taken at once.");
         }
 
-        var (streamId, eventCount) = _streams.Next(slot);
-        return new Lease(slot, streamId, eventCount);
+        var (streamId, expectedVersion) = _streams.Next(slot);
+        return new Lease(slot, streamId, expectedVersion);
     }
 
     public void Return(Lease lease) => _idle.Enqueue(lease.Slot);
 
     /// <param name="Slot">The slot the stream was taken from.</param>
     /// <param name="StreamId">The stream's ID.</param>
-    /// <param name="EventCount">The number of events the stream holds, before the append the lease is for.</param>
-    public readonly record struct Lease(int Slot, string StreamId, int EventCount);
+    /// <param name="ExpectedVersion">
+    /// The version that the lease's append expects, or <see langword="null"/> if the append creates the stream.
+    /// </param>
+    public readonly record struct Lease(int Slot, string StreamId, ulong? ExpectedVersion);
 }

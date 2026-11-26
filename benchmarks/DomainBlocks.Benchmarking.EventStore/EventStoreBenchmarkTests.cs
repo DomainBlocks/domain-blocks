@@ -239,9 +239,9 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
 
         try
         {
-            var expectedState = lease.EventCount == 0
-                ? ExpectedStreamState<TStreamPos>.DoesNotExist
-                : ExpectedStreamState.AtVersion(CreateStreamPosition((ulong)lease.EventCount - 1));
+            var expectedState = lease.ExpectedVersion is { } version
+                ? ExpectedStreamState.AtVersion(CreateStreamPosition(version))
+                : ExpectedStreamState<TStreamPos>.DoesNotExist;
 
             object[] events = [new TestEvent { Value = "Benchmark" }];
             await instance.AppendAsync(lease.StreamId, events, expectedState, cancellationToken: ct);
