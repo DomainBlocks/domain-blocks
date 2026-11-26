@@ -79,8 +79,8 @@ internal sealed class OpenLoopRun(BenchmarkOperation operation, OpenLoopOptions 
         catch (TimeoutException ex)
         {
             throw new TimeoutException(
-                $"{Interlocked.Read(ref _inFlight):N0} operation(s) were still in flight after the arrivals stopped " +
-                $"and the {options.DrainTimeout.TotalSeconds} s drain timeout elapsed.",
+                $"The drain timed out after {options.DrainTimeout.TotalSeconds} s with " +
+                $"{Interlocked.Read(ref _inFlight):N0} operation(s) still in flight.",
                 ex);
         }
     }
