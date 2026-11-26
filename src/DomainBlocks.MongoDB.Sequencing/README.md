@@ -13,8 +13,9 @@ guaranteeing total order across historical reads and change stream observations.
     - [Example: implementing a simple event store](#example-implementing-a-simple-event-store)
 - [Customizing append behavior](#customizing-append-behavior)
 - [Benchmarks](#benchmarks)
-    - [Peak throughput](#peak-throughput)
+    - [Sustainable throughput](#sustainable-throughput)
     - [Latency](#latency)
+    - [Batching delay](#batching-delay)
 
 ## Prerequisites
 
@@ -110,72 +111,92 @@ see [AppenderPolicy](../../examples/DomainBlocks.MongoDB.Sequencing.Examples/Sim
 
 Benchmarks were run against a local single-node MongoDB replica set running in Docker, on two machines:
 
-|         | MacBook Air                    | Windows PC                                   |
-|:--------|:-------------------------------|:---------------------------------------------|
-| CPU     | Apple M3, 8 logical processors | AMD Ryzen AI MAX+ 395, 32 logical processors |
-| OS      | macOS 26.6.2                   | Windows 11 Pro                               |
-| Docker  | Docker Desktop                 | Docker Desktop on WSL 2                      |
-| MongoDB | 7.0.32                         | 7.0.40                                       |
+|         | MacBook Air                                          | Windows PC                                   |
+|:--------|:-----------------------------------------------------|:---------------------------------------------|
+| CPU     | Apple M3, 8 logical processors                       | AMD Ryzen AI MAX+ 395, 32 logical processors |
+| OS      | macOS 27.2.1                                         | Windows 11 Pro                               |
+| Docker  | Docker Desktop on the Apple Virtualization framework | Docker Desktop on WSL 2                      |
+| MongoDB | 7.0.48                                               | 7.0.40                                       |
 
-Each machine has its own column in the tables below. Real-world deployments with network latency between the application
-and MongoDB will see higher latency and lower throughput.
+Appends are scheduled at random times, at a fixed average rate, as requests from independent users would arrive
+(a Poisson process). Each starts at its scheduled time, whether or not earlier appends have finished, and appends one
+document. Latency is measured from the scheduled time, so a late start counts. The appenders use the default options:
+batch size 1,000, queue capacity 1,000, and no batching delay. Figures are the median of four rounds, leaving out any
+round that didn't sustain its rate.
 
 The [benchmarks](../../benchmarks/DomainBlocks.MongoDB.Sequencing.Benchmarks/MongoSequencedAppenderBenchmarkTests.cs)
-are included in the repository and can be run against your own environment to get representative numbers for your
-setup.
+are included in the repository and can be run against your own environment. These environment variables configure them:
 
-### Peak throughput
+- `DBX_BENCHMARK_RATE`: the average arrival rate, in operations per second. The default is 10,000.
+- `DBX_BENCHMARK_NETWORK_LATENCY_MS`: the network latency to add to each response, in milliseconds.
+- `DBX_BENCHMARK_NETWORK_JITTER_MS`: how far the latency varies either way, in milliseconds. It needs
+  `DBX_BENCHMARK_NETWORK_LATENCY_MS`; without it, the benchmarks fail to start.
 
-Peak throughput measured over 15 seconds after a 5-second warm-up, with each operation appending a single document. The
-following parameters were used:
+### Sustainable throughput
 
-- Max in-flight operations: 1,000 total, spread evenly across the appender instances
-- Batch size: 1,000 (maximum append operations committed in a single transaction)
-- Queue capacity: 1,000 (maximum append operations buffered before callers block)
-- Batching delay: 5 ms (maximum time to wait for more append operations before committing a batch)
+Each run warms up for 5 seconds, then measures for 20. The sustainable rate is the highest at which at least 99% of the
+appends due in that window complete within it.
 
-| Appender instance count* | MacBook Air (ops/sec) | Windows PC (ops/sec) |
-|-------------------------:|----------------------:|---------------------:|
-|                        1 |               126,814 |               87,073 |
-|                        3 |               103,949 |               53,365 |
-|                        5 |                90,718 |               46,126 |
+| Instances | Network latency | MacBook Air (ops/sec) | Windows PC (ops/sec) |
+|----------:|:----------------|----------------------:|---------------------:|
+|         1 | none            |               112,000 |               70,000 |
+|         4 | none            |                91,000 |               71,000 |
+|         1 | 1 ms            |                79,000 |               54,000 |
+|         4 | 1 ms            |                67,000 |               54,000 |
 
-\* Values greater than 1 indicate multiple appender instances issuing append operations concurrently.
+Adding instances doesn't raise the sustainable rate, because the instances' transactions take turns on the counter
+document. On the MacBook Air, more instances lower the rate.
 
-Throughput decreases as appender instances are added. Each instance receives only its share of the 1,000 in-flight
-operations, resulting in more, smaller transactions rather than fewer, larger ones. The transactions take turns on the
-counter document, and each has a fixed cost.
+For the 1 ms rows, a proxy delays each of the server's responses by 1 ms. A single append's median latency then rises
+from 0.64 ms to 10 ms on the MacBook Air, and from 3.0 ms to 7.2 ms on the Windows PC.
 
-Deployments with a multi-node MongoDB cluster will see reduced throughput due to replication overhead, as
-`w: "majority"` write concern requires acknowledgement from a majority of members before a transaction can commit.
+On the MacBook Air, the delay added about 2.3 ms to each round trip, against 1.2 ms on the Windows PC. Its Docker VM is
+slower to resume after short pauses, which likely accounts for the difference.
 
-On Windows, .NET timers depend on the system clock, which has a resolution of
-[about 15 ms](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.delay?view=net-10.0#remarks) by
-default. The 5 ms batching delay therefore waits about 15 ms. With more than one instance, each instance's batches hold
-only its share of the in-flight operations, so they never reach the batch size and always wait for the full delay,
-which lowers the Windows figures for 3 and 5 instances.
-
-Throughput therefore drops further on Windows as instances are added. The table below gives the drop from one instance.
-The MacBook Air and Windows PC columns come from the throughput table above. The 1 ms timer column comes from separate
-runs that raised the timer resolution to 1 ms with `timeBeginPeriod`, using the median of three runs for each instance
-count. Raising the resolution removes part of the difference, but not all of it.
-
-| Appender instance count | MacBook Air (drop) | Windows PC (drop) | Windows PC, 1 ms timer (drop) |
-|------------------------:|-------------------:|------------------:|------------------------------:|
-|                       3 |                18% |               39% |                           24% |
-|                       5 |                28% |               47% |                           36% |
+Deployments with a multi-node MongoDB cluster can expect lower throughput, as `w: "majority"` write concern waits for a
+majority of members to acknowledge each commit.
 
 ### Latency
 
-Single-appender latency with one append in flight and one document per operation, using the default appender options.
-Warm-up runs for at least 2 seconds and 1,000 appends. Measurement then stops after 10,000 appends or 30 seconds,
-whichever comes first: 10,000 appends on the MacBook Air and 8,875 on the Windows PC.
+Latency in milliseconds with no network latency added:
 
-| Metric | MacBook Air (ms) | Windows PC (ms) |
-|-------:|-----------------:|----------------:|
-|    p50 |             0.64 |            3.18 |
-|    p90 |             0.95 |            4.09 |
-|    p99 |             1.58 |            5.20 |
-|    min |             0.55 |            2.52 |
-|    max |             3.78 |            8.92 |
-|   mean |             0.71 |            3.38 |
+| Instances | Load               | MacBook Air p50 | MacBook Air p99 | Windows PC p50 | Windows PC p99 |
+|----------:|:-------------------|----------------:|----------------:|---------------:|---------------:|
+|         1 | 1 in flight        |            0.64 |             1.9 |            3.0 |            4.8 |
+|         1 | 1,000/s            |            0.91 |             3.3 |            4.8 |            7.6 |
+|         1 | 10,000/s           |             1.2 |             5.1 |            5.7 |            8.9 |
+|         1 | 80% of sustainable |             3.7 |              13 |            9.4 |             15 |
+|         4 | 1,000/s            |             1.6 |              11 |            9.3 |             40 |
+|         4 | 10,000/s           |             4.8 |              27 |             11 |             45 |
+|         4 | 80% of sustainable |              12 |              63 |             18 |             71 |
+
+### Batching delay
+
+`BatchingDelay` makes a batch that isn't full wait for more appends before it commits. None of the delays tried (1, 2,
+and 5 ms) raised the sustainable rate. With several instances, a 1 ms delay usually lowered latency at 10,000/s and
+above, since it gathers appends into fewer transactions; with one instance, it only added latency.
+
+Latency in milliseconds at 10,000/s:
+
+| Instances | Network latency | Batching delay | MacBook Air p50 | MacBook Air p99 | Windows PC p50 | Windows PC p99 |
+|----------:|:----------------|:---------------|----------------:|----------------:|---------------:|---------------:|
+|         1 | none            | none           |             1.2 |             5.1 |            5.7 |            8.9 |
+|         1 | none            | 1 ms           |             5.4 |              11 |            6.3 |             10 |
+|         4 | none            | none           |             4.8 |              27 |             11 |             45 |
+|         4 | none            | 1 ms           |             3.6 |              17 |            9.3 |             34 |
+|         4 | 1 ms            | none           |              19 |              98 |             26 |            118 |
+|         4 | 1 ms            | 1 ms           |              17 |              58 |             26 |            107 |
+
+A delay can still raise throughput for a single process appending as fast as it can, with a fixed number of appends in
+flight. With one instance:
+
+| Appends in flight | Batching delay | MacBook Air (ops/sec) | Windows PC (ops/sec) |
+|------------------:|:---------------|----------------------:|---------------------:|
+|             1,000 | none           |               102,000 |               81,000 |
+|             1,000 | 5 ms           |               137,000 |               87,000 |
+|             2,000 | none           |               136,000 |               84,000 |
+
+Doubling the appends in flight did about as well as the delay on both machines.
+
+On Windows, every run here raised the system clock's resolution to 1 ms; at the default resolution, a 1 ms delay lasts
+about 15 ms.
