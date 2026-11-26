@@ -35,7 +35,7 @@ public sealed class IdleStreamPool(int capacity, int eventsPerStream)
                 throw new InvalidOperationException($"More than {capacity:N0} streams are taken at once.");
         }
 
-        var streamId = _streams.Next(slot, out var eventCount);
+        var (streamId, eventCount) = _streams.Next(slot);
         return new Lease(slot, streamId, eventCount);
     }
 

@@ -48,7 +48,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
         var runner = new BenchmarkRunner();
 
         var result = await runner.MeasureLatencyAsync(
-            (workerIndex, token) => AppendAsync(eventStore, streamIdGenerator.Next(workerIndex), token),
+            (workerIndex, token) => AppendAsync(eventStore, streamIdGenerator.Next(workerIndex).StreamId, token),
             new LatencyOptions(),
             ct);
 
@@ -192,7 +192,7 @@ public abstract class EventStoreBenchmarkTests<TStreamPos, TLogPos>(
             var result = await runner.MeasureThroughputAsync(
                 (workerIndex, token) => AppendAsync(
                     instances[workerIndex % instanceCount],
-                    streamIdGenerator.Next(workerIndex),
+                    streamIdGenerator.Next(workerIndex).StreamId,
                     token),
                 new ThroughputOptions { InFlight = inFlight },
                 ct);

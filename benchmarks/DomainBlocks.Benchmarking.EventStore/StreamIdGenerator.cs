@@ -49,15 +49,10 @@ public sealed class StreamIdGenerator
     }
 
     /// <summary>
-    /// Returns the ID of the stream that a worker's next append of one event goes to.
-    /// </summary>
-    public string Next(int workerIndex) => Next(workerIndex, out _);
-
-    /// <summary>
     /// Returns the ID of the stream that a worker's next append of one event goes to, and the number of events the
-    /// stream holds before that append.
+    /// stream holds before that append. Each call counts the append it returns, so a worker calls it once per append.
     /// </summary>
-    public string Next(int workerIndex, out int eventCount)
+    public (string StreamId, int EventCount) Next(int workerIndex)
     {
         ref var stream = ref _workerStreams[workerIndex];
 
@@ -75,8 +70,9 @@ public sealed class StreamIdGenerator
             stream.EventCount = 0;
         }
 
-        eventCount = stream.EventCount++;
-        return stream.Id;
+        // The append is counted when it's handed out rather than when it completes, so callers need no second call.
+        // That's safe because a worker has one append in flight, and a failed append fails the run.
+        return (stream.Id, stream.EventCount++);
     }
 
     private struct WorkerStream

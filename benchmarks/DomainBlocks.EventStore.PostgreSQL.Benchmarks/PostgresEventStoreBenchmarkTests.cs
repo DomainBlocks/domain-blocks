@@ -40,7 +40,7 @@ public class PostgresEventStoreBenchmarkTests() :
             async (workerIndex, token) =>
             {
                 await eventStore.AppendAsync(
-                    streamIdGenerator.Next(workerIndex),
+                    streamIdGenerator.Next(workerIndex).StreamId,
                     [new TestEvent { Value = "Benchmark" }],
                     cancellationToken: token);
 
@@ -101,7 +101,7 @@ public class PostgresEventStoreBenchmarkTests() :
 
         var result = await runner.MeasureThroughputAsync(
             (workerIndex, token) => eventStore.AppendAsync(
-                streamIdGenerator.Next(workerIndex),
+                streamIdGenerator.Next(workerIndex).StreamId,
                 [new TestEvent { Value = "Benchmark" }],
                 cancellationToken: token),
             new ThroughputOptions { InFlight = inFlight },
