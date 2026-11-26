@@ -125,8 +125,12 @@ batch size 1,000, queue capacity 1,000, and no batching delay. Figures are the m
 round that didn't sustain its rate.
 
 The [benchmarks](../../benchmarks/DomainBlocks.MongoDB.Sequencing.Benchmarks/MongoSequencedAppenderBenchmarkTests.cs)
-are included in the repository and can be run against your own environment. `DBX_BENCHMARK_RATE` sets the rate,
-`DBX_BENCHMARK_NETWORK_LATENCY_MS` adds network latency, and `DBX_BENCHMARK_NETWORK_JITTER_MS` varies it.
+are included in the repository and can be run against your own environment. These environment variables configure them:
+
+- `DBX_BENCHMARK_RATE`: the average arrival rate, in operations per second. The default is 10,000.
+- `DBX_BENCHMARK_NETWORK_LATENCY_MS`: the network latency to add to each response, in milliseconds.
+- `DBX_BENCHMARK_NETWORK_JITTER_MS`: how far the latency varies either way, in milliseconds. It needs
+  `DBX_BENCHMARK_NETWORK_LATENCY_MS`; without it, the benchmarks fail to start.
 
 ### Sustainable throughput
 
