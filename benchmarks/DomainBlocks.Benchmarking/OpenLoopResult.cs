@@ -50,7 +50,7 @@ public sealed record OpenLoopResult(
     public const double SustainedFraction = 0.99;
 
     /// <summary>
-    /// The operations completed in the window, as a share of the arrivals scheduled in it. Completions are the
+    /// Gets the operations completed in the window, as a share of the arrivals scheduled in it. Completions are the
     /// arrivals issued less the growth in the operations in flight, so a fraction well below one means a growing
     /// backlog, or arrivals that weren't issued on time.
     /// </summary>
@@ -59,7 +59,7 @@ public sealed record OpenLoopResult(
     public double OpsPerSecond => Duration == TimeSpan.Zero ? 0 : Completed / Duration.TotalSeconds;
 
     /// <summary>
-    /// Whether the system kept up with the rate: arrivals never stopped early, and at least
+    /// Gets a value that indicates whether the system kept up with the rate: arrivals never stopped early, and at least
     /// <see cref="SustainedFraction"/> of the window's arrivals completed in it.
     /// </summary>
     public bool IsSustained => !StoppedEarly && CompletedFraction >= SustainedFraction;
