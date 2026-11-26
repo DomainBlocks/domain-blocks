@@ -3,10 +3,35 @@ using HdrHistogram;
 namespace DomainBlocks.Benchmarking;
 
 /// <summary>
-/// The result of an open-loop run. <see cref="Scheduled"/> counts the arrivals scheduled in the measurement window, and
-/// <see cref="Completed"/> the operations that completed in it, whenever they arrived. <see cref="Latencies"/> holds,
-/// for each arrival in the window, the time from its scheduled arrival to its completion.
+/// The result of an open-loop run.
 /// </summary>
+/// <param name="Rate">The mean arrival rate offered, in operations per second.</param>
+/// <param name="Scheduled">
+/// The arrivals scheduled within the measurement window, including any not yet issued when it ended.
+/// </param>
+/// <param name="Completed">
+/// The operations that completed within the window. Those include operations that arrived during the warm-up, so a run
+/// that keeps up can complete slightly more than <paramref name="Scheduled"/>.
+/// </param>
+/// <param name="Duration">The length of the window, or zero if arrivals stopped before it began.</param>
+/// <param name="Latencies">
+/// For each arrival scheduled within the window, the time from its scheduled arrival to its completion, in
+/// <see cref="System.Diagnostics.Stopwatch"/> ticks.
+/// </param>
+/// <param name="Errors">The operations that failed.</param>
+/// <param name="MaxOutstanding">The most operations in flight at once.</param>
+/// <param name="MaxIssueLag">
+/// The longest time by which an arrival was issued after its scheduled time. It's normally a few microseconds. More
+/// means that the issuing thread fell behind, and the lateness counts in the latencies.
+/// </param>
+/// <param name="StoppedEarly">
+/// Whether arrivals stopped because <see cref="OpenLoopOptions.MaxOutstanding"/> operations were in flight.
+/// </param>
+/// <param name="Undrained">The operations still in flight when the drain timed out.</param>
+/// <param name="TimerProbe">
+/// The median time that a 1 ms delay took at the start of the run, which shows the timer resolution the run had.
+/// </param>
+/// <param name="Gc">The garbage collections during the window.</param>
 public sealed record OpenLoopResult(
     double Rate,
     long Scheduled,

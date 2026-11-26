@@ -92,7 +92,7 @@ public static class BenchmarkReport
         await WritePercentilesAsync(output, result.Latencies);
 
         await output.WriteLineAsync($"in flight:     at most {result.MaxOutstanding:N0}");
-        await output.WriteLineAsync($"issue lag:     at most {result.MaxIssueLag.TotalMilliseconds:F3} ms");
+        await output.WriteLineAsync($"issued late:   at most {result.MaxIssueLag.TotalMilliseconds:F3} ms");
         await output.WriteLineAsync($"timer:         a 1 ms delay took {timerMillis:F2} ms (median of 21)");
         await output.WriteLineAsync($"gc:            {result.Gc}");
     }
