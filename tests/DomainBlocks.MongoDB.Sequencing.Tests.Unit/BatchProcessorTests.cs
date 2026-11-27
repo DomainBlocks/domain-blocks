@@ -116,7 +116,7 @@ public class BatchProcessorTests
         var committer = new FakeBatchCommitter(committedValues: ["taken"]);
         var policy = new CallbackAppenderPolicy<string>(onConflict: _ => ConflictResolution.Succeed);
 
-        // Waiting before a retry would outlast the test's timeout.
+        // The rest of the batch commits without the retry delay, or the test would time out waiting an hour.
         var options = new MongoSequencedAppenderOptions { ConflictRetryDelay = TimeSpan.FromHours(1) };
         var batchProcessor = CreateBatchProcessor(committer, policy, options);
         var conflictingRequest = CreateRequest("taken");
