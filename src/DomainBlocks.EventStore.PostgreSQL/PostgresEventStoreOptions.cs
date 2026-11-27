@@ -32,7 +32,7 @@ public sealed class PostgresEventStoreOptions
     } = 1_000;
 
     /// <summary>
-    /// Gets or sets the maximum number of append requests committed in one round trip. The default is 500.
+    /// Gets or sets the maximum number of append requests committed in one round trip. The default is 1,000.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is zero or negative.</exception>
     public int AppendMaxBatchSize
@@ -43,7 +43,7 @@ public sealed class PostgresEventStoreOptions
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
             field = value;
         }
-    } = 500;
+    } = 1_000;
 
     /// <summary>
     /// Gets or sets the number of events fetched per round trip when reading. The default is 1,000.
