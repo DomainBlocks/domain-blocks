@@ -72,10 +72,10 @@ internal sealed class AppenderPolicy(IMongoCollection<BsonDocument> eventLog) :
         AppendConflict<AppendContext> conflict,
         CancellationToken cancellationToken)
     {
-        return ValueTask.FromResult(Resolve(conflict));
+        return ValueTask.FromResult(ResolveConflict(conflict));
     }
 
-    private static ConflictResolution Resolve(AppendConflict<AppendContext> conflict)
+    private static ConflictResolution ResolveConflict(AppendConflict<AppendContext> conflict)
     {
         // MongoDB does not populate WriteError.Details for duplicate key errors (code 11000). The only signal is the
         // error message, which includes the index name. Matching on it is fragile, but it is the only option that the
