@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging.Abstractions;
+using MongoDB.Bson;
 using NUnit.Framework;
 using Shouldly;
 
@@ -106,6 +107,49 @@ public class BatchProcessorTests
 
         var exception = await conflictingRequest.Completion.WaitAsync(ct).ShouldThrowAsync<AppendConflictException>();
         exception.InnerException.ShouldNotBeNull().Message.ShouldBe("Duplicate value 'taken'.");
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task RunAsync_ConflictSucceededByPolicy_CompletesRequestWithoutWriting(CancellationToken ct)
+    {
+        var committer = new FakeBatchCommitter(committedValues: ["taken"]);
+        var policy = new CallbackAppenderPolicy<string>(onConflict: _ => ConflictResolution.Succeed);
+
+        // Waiting before a retry would outlast the test's timeout.
+        var options = new MongoSequencedAppenderOptions { ConflictRetryDelay = TimeSpan.FromHours(1) };
+        var batchProcessor = CreateBatchProcessor(committer, policy, options);
+        var conflictingRequest = CreateRequest("taken");
+        var otherRequest = CreateRequest("other");
+
+        await RunOneBatchAsync(batchProcessor, [conflictingRequest, otherRequest], ct);
+
+        await conflictingRequest.Completion.WaitAsync(ct);
+        await otherRequest.Completion.WaitAsync(ct);
+        committer.CommitAttempts.ShouldBe(["taken, other", "other"]);
+        committer.CommittedValues.ShouldBe(["taken", "other"]);
+    }
+
+    [Test]
+    [CancelAfter(TestTimeoutMillis)]
+    public async Task RunAsync_ConflictRetried_ReportsOperationTimeOfEachAttempt(CancellationToken ct)
+    {
+        var committer = new FakeBatchCommitter(committedValues: ["taken"]);
+        var conflicts = new List<AppendConflict<string>>();
+
+        var policy = new CallbackAppenderPolicy<string>(
+            onConflict: conflict =>
+            {
+                conflicts.Add(conflict);
+                return ConflictResolution.Retry;
+            });
+
+        var options = new MongoSequencedAppenderOptions { MaxConflictRetries = 1, ConflictRetryDelay = TimeSpan.Zero };
+        var batchProcessor = CreateBatchProcessor(committer, policy, options);
+
+        await RunOneBatchAsync(batchProcessor, [CreateRequest("taken")], ct);
+
+        conflicts.Select(x => x.OperationTime).ShouldBe([new BsonTimestamp(1), new BsonTimestamp(2)]);
     }
 
     [Test]

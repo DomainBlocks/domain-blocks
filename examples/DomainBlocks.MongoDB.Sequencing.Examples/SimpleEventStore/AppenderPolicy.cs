@@ -52,14 +52,16 @@ public class AppenderPolicy(IMongoCollection<EventDocument> collection) : IMongo
         }
     }
 
-    public ConflictResolution OnConflict(AppendConflict<AppendContext> conflict)
+    public ValueTask<ConflictResolution> OnConflictAsync(
+        AppendConflict<AppendContext> conflict,
+        CancellationToken cancellationToken)
     {
         // If a duplicate key error occurs on (streamId, streamVersion):
         // - Fail if we expected a specific version
         // - Retry if no expected version was specified
         // On retry, OnBatchCommittingAsync will run again, re-fetching and rebasing stream versions.
-        return conflict.Context.ExpectedVersion.HasValue
+        return ValueTask.FromResult(conflict.Context.ExpectedVersion.HasValue
             ? ConflictResolution.Fail(new InvalidOperationException("Expected version conflict"))
-            : ConflictResolution.Retry;
+            : ConflictResolution.Retry);
     }
 }

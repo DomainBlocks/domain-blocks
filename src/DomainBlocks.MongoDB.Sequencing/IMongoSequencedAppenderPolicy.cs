@@ -24,8 +24,10 @@ public interface IMongoSequencedAppenderPolicy<TContext>
 
     /// <summary>
     /// Called when a duplicate key conflict is detected during a commit attempt. Return
-    /// <see cref="ConflictResolution.Retry"/> to retry the append operation, or <see cref="ConflictResolution.Fail"/>
-    /// to fault it.
+    /// <see cref="ConflictResolution.Retry"/> to retry the append operation, <see cref="ConflictResolution.Succeed"/>
+    /// to complete it without writing its documents, or <see cref="ConflictResolution.Fail"/> to fault it.
     /// </summary>
-    ConflictResolution OnConflict(AppendConflict<TContext> conflict);
+    ValueTask<ConflictResolution> OnConflictAsync(
+        AppendConflict<TContext> conflict,
+        CancellationToken cancellationToken);
 }

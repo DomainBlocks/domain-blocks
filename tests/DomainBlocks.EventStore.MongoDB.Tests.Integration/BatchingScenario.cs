@@ -142,6 +142,11 @@ internal sealed class BatchingScenario : IAsyncDisposable
             await policy.OnBatchCommittingAsync(batch, cancellationToken);
         }
 
-        public ConflictResolution OnConflict(AppendConflict<AppendContext> conflict) => policy.OnConflict(conflict);
+        public ValueTask<ConflictResolution> OnConflictAsync(
+            AppendConflict<AppendContext> conflict,
+            CancellationToken cancellationToken)
+        {
+            return policy.OnConflictAsync(conflict, cancellationToken);
+        }
     }
 }

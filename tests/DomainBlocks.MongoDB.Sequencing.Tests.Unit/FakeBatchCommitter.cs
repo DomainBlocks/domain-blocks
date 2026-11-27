@@ -4,7 +4,8 @@ namespace DomainBlocks.MongoDB.Sequencing.Tests.Unit;
 
 /// <summary>
 /// Represents a committer whose target collection has a unique index on each document's value, so a commit conflicts on
-/// a value that's already committed or repeated in the batch.
+/// a value that's already committed or repeated in the batch. A conflict's operation time is its attempt's number,
+/// counting from 1.
 /// </summary>
 internal sealed class FakeBatchCommitter(params string[] committedValues) : IBatchCommitter
 {
@@ -50,8 +51,9 @@ internal sealed class FakeBatchCommitter(params string[] committedValues) : IBat
 
             var message = $"Duplicate value '{values[i]}'.";
             var exception = new InvalidOperationException(message);
+            var operationTime = new BsonTimestamp(_commitAttempts.Count);
 
-            return Task.FromResult<CommitResult>(new CommitResult.Conflict(i, message, exception));
+            return Task.FromResult<CommitResult>(new CommitResult.Conflict(i, message, exception, operationTime));
         }
 
         _committedValues.AddRange(values);
