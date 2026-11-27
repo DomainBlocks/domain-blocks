@@ -91,8 +91,10 @@ the transaction.
     - Before the first commit attempt.
     - After a duplicate key conflict, with the requests still pending.
     - After a transient error, such as a write conflict, if queued requests have joined the batch.
-- `OnConflict` decides whether to retry or fail the request that caused a duplicate key conflict on the target
-  collection.
+- `OnConflictAsync` decides whether to retry, succeed, or fail the request that caused a duplicate key conflict on the
+  target collection. `Succeed` is for idempotent commits: it completes a request whose documents are already
+  committed. To read the conflicting documents, use a majority read in a causally consistent session advanced to the
+  conflict's `OperationTime`.
 
 Requests appended with the same `requestId` in one batch reach the policy once: it receives the first, and the others
 complete with that request's outcome.

@@ -34,7 +34,7 @@ public sealed class SimpleEventStore : IAsyncDisposable
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
     {
         // Enforces unique per-stream versioning and enables efficient stream reads.
-        // Also drives the OnConflict callback when two writers clash on the same (streamId, streamVersion).
+        // Also drives the OnConflictAsync callback when two writers clash on the same (streamId, streamVersion).
         await _collection.Indexes.CreateOneAsync(
             new CreateIndexModel<EventDocument>(
                 Builders<EventDocument>.IndexKeys.Ascending(x => x.StreamId).Ascending(x => x.StreamVersion),

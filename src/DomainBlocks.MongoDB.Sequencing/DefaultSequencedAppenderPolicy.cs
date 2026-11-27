@@ -19,8 +19,10 @@ public sealed class DefaultSequencedAppenderPolicy<TContext> : IMongoSequencedAp
         return Task.CompletedTask;
     }
 
-    public ConflictResolution OnConflict(AppendConflict<TContext> conflict)
+    public ValueTask<ConflictResolution> OnConflictAsync(
+        AppendConflict<TContext> conflict,
+        CancellationToken cancellationToken)
     {
-        return ConflictResolution.Retry;
+        return ValueTask.FromResult(ConflictResolution.Retry);
     }
 }

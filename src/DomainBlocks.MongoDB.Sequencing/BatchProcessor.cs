@@ -223,12 +223,20 @@ internal sealed class BatchProcessor<TContext>(
             request.Context,
             conflict.DocumentIndex - firstDocumentIndex,
             conflict.ErrorMessage,
-            conflict.OriginatingException);
+            conflict.OriginatingException,
+            conflict.OperationTime);
 
         using var scope = logger.BeginScope(new { RequestId = request.Id });
         logger.LogDebug("Duplicate key conflict detected; invoking policy");
 
-        var resolution = policy.OnConflict(appendConflict);
+        var resolution = await policy.OnConflictAsync(appendConflict, ct).ConfigureAwait(false);
+
+        if (resolution is ConflictResolution.SucceedResolution)
+        {
+            logger.LogDebug("Conflict resolved by policy");
+            CompleteAndRemoveFromBatch();
+            return;
+        }
 
         if (resolution is ConflictResolution.FailResolution fail)
         {
@@ -268,7 +276,7 @@ internal sealed class BatchProcessor<TContext>(
             await Task.Delay(options.ConflictRetryDelay, ct).ConfigureAwait(false);
         }
 
-        void CompleteAndRemoveFromBatch(Exception exception)
+        void CompleteAndRemoveFromBatch(Exception? exception = null)
         {
             request.TryComplete(exception);
             batch.Remove(request);

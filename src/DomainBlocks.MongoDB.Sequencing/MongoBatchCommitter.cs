@@ -96,10 +96,13 @@ internal sealed class MongoBatchCommitter<TDocument> : IBatchCommitter
         }
         catch (MongoBulkWriteException ex) when (ex.WriteErrors.Any(x => x.Code == MongoErrorCodes.DuplicateKey))
         {
+            // The conflicting documents are in the transaction's snapshot, so this time is at or after their writes.
+            var operationTime = session.OperationTime;
+
             await SafeAbortTransactionAsync(session, cancellationToken).ConfigureAwait(false);
 
             var firstError = ex.WriteErrors.First(e => e.Code == MongoErrorCodes.DuplicateKey);
-            return new CommitResult.Conflict(firstError.Index, firstError.Message, ex);
+            return new CommitResult.Conflict(firstError.Index, firstError.Message, ex, operationTime);
         }
         catch (Exception)
         {

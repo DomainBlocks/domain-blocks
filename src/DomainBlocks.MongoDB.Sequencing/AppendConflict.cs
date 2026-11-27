@@ -15,10 +15,12 @@ public sealed class AppendConflict<TContext>
         TContext context,
         int documentIndex,
         string? errorMessage,
-        Exception originatingException)
+        Exception originatingException,
+        BsonTimestamp operationTime)
     {
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(originatingException);
+        ArgumentNullException.ThrowIfNull(operationTime);
 
         if (documents.Count == 0)
             throw new ArgumentException("At least one document is required.", nameof(documents));
@@ -28,6 +30,7 @@ public sealed class AppendConflict<TContext>
         DocumentIndex = documentIndex;
         ErrorMessage = errorMessage;
         OriginatingException = originatingException;
+        OperationTime = operationTime;
     }
 
     /// <summary>
@@ -55,4 +58,10 @@ public sealed class AppendConflict<TContext>
     /// inner exception.
     /// </summary>
     public Exception OriginatingException { get; }
+
+    /// <summary>
+    /// Gets the operation time of the failed commit attempt. A majority read in a causally consistent session advanced
+    /// to this time sees the documents that the append conflicted with, unless they were rolled back.
+    /// </summary>
+    public BsonTimestamp OperationTime { get; }
 }

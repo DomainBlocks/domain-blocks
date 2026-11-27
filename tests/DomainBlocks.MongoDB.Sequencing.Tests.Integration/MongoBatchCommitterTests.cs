@@ -28,6 +28,26 @@ public class MongoBatchCommitterTests : MongoIntegrationTestBase
 
     [Test]
     [CancelAfter(TimeoutMillis)]
+    public async Task CommitAsync_DuplicateKey_ReturnsOperationTimeAfterConflictingWrite(CancellationToken ct)
+    {
+        await CreateUniqueValueIndexAsync(ct);
+        var committer = CreateCommitter();
+        using var otherSession = await MongoClient.StartSessionAsync(cancellationToken: ct);
+
+        await MongoClient
+            .GetDatabase(DatabaseName)
+            .GetCollection<BsonDocument>(TargetNs.CollectionName)
+            .InsertOneAsync(otherSession, CreateDocument("taken"), cancellationToken: ct);
+
+        var result = await committer.CommitAsync([CreateDocument("taken")], ct);
+
+        // The conflicting write is in the transaction's snapshot, so a read after this time sees it.
+        var conflict = result.ShouldBeOfType<CommitResult.Conflict>();
+        conflict.OperationTime.ShouldBeGreaterThanOrEqualTo(otherSession.OperationTime);
+    }
+
+    [Test]
+    [CancelAfter(TimeoutMillis)]
     public async Task CommitAsync_DuplicateKey_RollsBackSequenceClaim(CancellationToken ct)
     {
         await CreateUniqueValueIndexAsync(ct);

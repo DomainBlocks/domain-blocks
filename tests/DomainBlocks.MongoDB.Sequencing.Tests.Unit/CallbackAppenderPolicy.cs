@@ -14,8 +14,8 @@ internal sealed class CallbackAppenderPolicy<TContext>(
         return onBatchCommitting?.Invoke(batch, ct) ?? Task.CompletedTask;
     }
 
-    public ConflictResolution OnConflict(AppendConflict<TContext> conflict)
+    public ValueTask<ConflictResolution> OnConflictAsync(AppendConflict<TContext> conflict, CancellationToken ct)
     {
-        return onConflict?.Invoke(conflict) ?? ConflictResolution.Fail();
+        return ValueTask.FromResult(onConflict?.Invoke(conflict) ?? ConflictResolution.Fail());
     }
 }
