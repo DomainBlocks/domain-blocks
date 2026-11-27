@@ -12,8 +12,8 @@ public abstract class ConflictResolution
     public static ConflictResolution Retry { get; } = new RetryResolution();
 
     /// <summary>
-    /// Completes the conflicting append operation successfully without writing its documents. Use it to resolve an
-    /// idempotent write that's already committed.
+    /// Completes the conflicting append operation successfully without writing its documents. Can be used to resolve
+    /// an idempotent write that's already committed.
     /// </summary>
     public static ConflictResolution Succeed { get; } = new SucceedResolution();
 
